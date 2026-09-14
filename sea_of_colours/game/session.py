@@ -10,7 +10,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Set, Tuple, cast
+from typing import (
+    AbstractSet,
+    Any,
+    Dict,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    cast,
+)
 import copy
 import random
 import re
@@ -5870,7 +5882,12 @@ class GameSession:
         return False
 
     def _undamaged_harvesters_at(
-        self, x: int, y: int, exclude: Optional[str] = None
+        self,
+        x: int,
+        y: int,
+        exclude: Optional[str] = None,
+        *,
+        departing: Optional[AbstractSet[str]] = None,
     ) -> List[Entity]:
         """List every healthy (non-damaged) harvester at ``(x, y)``.
 
@@ -5878,12 +5895,23 @@ class GameSession:
         as a normal placement or a mutual-damage collision
         (§3.6 v0.7.3). The order is insertion order of
         :attr:`entities` so the resulting message is deterministic.
+
+        v1.48 — ``departing`` names harvesters being lifted off the
+        surface during THIS hour. §3.17's governing sentence collides
+        two harvesters *arriving* on one cell; a harvester on its way to
+        orbit is not arriving, so it cannot be rammed. Without this the
+        answer depended on whether the engine's seat loop happened to
+        reach the lifter or the lander first — see
+        docs/OUTSTANDING_ISSUES.md #56.
         """
+        leaving = departing or frozenset()
         out: List[Entity] = []
         for e in self.entities.values():
             if e.entity_type != "harvester":
                 continue
             if e.id == exclude:
+                continue
+            if e.id in leaving:
                 continue
             if bool(getattr(e, "damaged", False)):
                 continue
@@ -6596,6 +6624,7 @@ class GameSession:
         live_override: Optional[Set[Tuple[int, int]]] = None,
         emp_blocked_cells: Optional[Set[Tuple[int, int]]] = None,
         snap_hot_cells: Optional[Dict[Tuple[int, int], Dict[str, Any]]] = None,
+        departing_units: Optional[AbstractSet[str]] = None,
     ) -> Tuple[bool, str, bool]:
         """Drop a berthed harvester onto the surface.
 
@@ -6726,7 +6755,9 @@ class GameSession:
         # harvesters already there are unaffected (they're wreckage;
         # this lifter can land beside them).
         owner_play = cast(PlayerId, owner)
-        collisions = self._undamaged_harvesters_at(x, y, exclude=hh.id)
+        collisions = self._undamaged_harvesters_at(
+            x, y, exclude=hh.id, departing=departing_units,
+        )
         if collisions:
             # Dropping harvester stays orbital, becomes damaged (blamed on
             # the defender it rammed); defenders damaged by the dropper.
@@ -6840,6 +6871,7 @@ class GameSession:
         harvest_budget: int = 0,  # back-compat; no longer used (v0.6.0)
         emp_blocked_cells: Optional[Set[Tuple[int, int]]] = None,
         snap_hot_cells: Optional[Dict[Tuple[int, int], Dict[str, Any]]] = None,
+        departing_units: Optional[AbstractSet[str]] = None,
     ) -> Tuple[bool, str, bool]:
         """Step a harvester to an adjacent tile.
 
@@ -6901,7 +6933,9 @@ class GameSession:
         # stay at their current positions, both become damaged.
         # Damaged harvesters at the target tile don't trigger collision.
         owner_play = cast(PlayerId, owner)
-        collisions = self._undamaged_harvesters_at(nx, ny, exclude=harvester_id)
+        collisions = self._undamaged_harvesters_at(
+            nx, ny, exclude=harvester_id, departing=departing_units,
+        )
         if collisions:
             # Stepper stays at (h.x, h.y) — no position change.
             spilled_self = self._damage_harvester(h, by=collisions[0].owner)

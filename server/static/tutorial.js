@@ -30,10 +30,12 @@
   //: because since narration arrived this file has two "mute"s and only
   //: one of them is about audio.
   var SUPPRESS_KEY = "soc.tutorial.muted.v1";
-  //: Narration on/off. Off by default and deliberately so: a film that
-  //: starts talking unprompted in a room of forty people is a worse
-  //: first impression than a silent one, and most browsers would refuse
-  //: to autoplay it audibly anyway.
+  //: Narration on/off, remembered per browser. ON when unset (v1.48):
+  //: every film is now voiced, and the reason it defaulted off was that
+  //: none of them were — a toggle offering silence over silence is just
+  //: a dead button. The room-of-forty objection is real, so the toggle
+  //: stays, an explicit "off" is remembered, and nothing here can make
+  //: noise before the click that opens the tutorial.
   var NARRATE_KEY = "soc.tutorial.narrate.v1";
 
   /* ── The reels ──────────────────────────────────────────────────────
@@ -60,7 +62,7 @@
       title: "Night one — you cannot see anything yet",
       chapters: [
         {
-          film: "basic_probe.webm",
+          film: "01_basic_probe.webm",
           heading: "Probes cut holes in the fog",
           body:
             "The board starts blacked out. You have no idea where the RED is, "
@@ -76,7 +78,7 @@
           todo: "Launch both probes, on two separate patches of fog.",
         },
         {
-          film: "basic_praxis.webm",
+          film: "02_basic_praxis.webm",
           heading: "PRAXIS carries out the plan",
           body:
             "Nothing you click happens immediately. Orders stack up in the "
@@ -96,7 +98,7 @@
       title: "Orbit — spending the morning's credits",
       chapters: [
         {
-          film: "basic_orbit_probes.webm",
+          film: "03_basic_orbit_probes.webm",
           heading: "1000 credits a turn, and probes are what you can afford",
           body:
             "Between nights you are in orbit, and you get a fresh 1000 credits "
@@ -116,7 +118,7 @@
       title: "Night two — harvesters, and how to lose one",
       chapters: [
         {
-          film: "basic_drop.webm",
+          film: "04_basic_drop.webm",
           heading: "RED in the vault is the whole game — and not all RED is "
             + "worth the same",
           body:
@@ -146,7 +148,7 @@
             + "the richest seam you can see, walk it, and LIFT.",
         },
         {
-          film: "basic_stranded.webm",
+          film: "05_basic_stranded.webm",
           heading: "A harvester you do not lift is a harvester you lose",
           body:
             "This is the one that catches everybody, so the film does not "
@@ -173,7 +175,7 @@
       title: "Orbit — where the score actually comes from",
       chapters: [
         {
-          film: "basic_score.webm",
+          film: "06_basic_score.webm",
           heading: "Ground, hold, station, catapult, score",
           body:
             "If you harvested last night and the scoreboard did not move, "
@@ -191,7 +193,7 @@
           todo: "Commit the orbit to load the catapult. It throws tomorrow night.",
         },
         {
-          film: "basic_buy_harvester.webm",
+          film: "07_basic_buy_harvester.webm",
           heading: "Two harvesters, two seams",
           body:
             "By now you have banked something and you have credits stacked from "
@@ -211,7 +213,7 @@
       title: "Last night — traffic, and stale eyes",
       chapters: [
         {
-          film: "basic_crash.webm",
+          film: "08_basic_crash.webm",
           heading: "Two harvesters cannot share a square",
           body:
             "It happens in two shapes, and the film shows both in one real "
@@ -229,7 +231,7 @@
           todo: "Route both harvesters clear of the trails they left last night.",
         },
         {
-          film: "basic_supersede.webm",
+          film: "09_basic_supersede.webm",
           heading: "A newer probe wins the square",
           body:
             "Probes do not stack usefully. Where two of your probe fields "
@@ -273,7 +275,7 @@
       title: "Night one — the map is dark, and it is still telling you things",
       chapters: [
         {
-          film: "adv_hotdrop.webm",
+          film: "10_adv_hotdrop.webm",
           heading: "Blue signs, and landing on ground you cannot see",
           body:
             "Blue is radioactive. Every blue pocket smears a glow across "
@@ -300,7 +302,7 @@
       title: "Orbit — what blue is actually for",
       chapters: [
         {
-          film: "adv_buy_emp.webm",
+          film: "11_adv_buy_emp.webm",
           heading: "Credits buy hulls. Weapons cost blue.",
           body:
             "Two currencies, and they do not convert. Credits arrive on "
@@ -321,7 +323,7 @@
       title: "Night two — the REDSIGN, and why jackpots cannot be kept quiet",
       chapters: [
         {
-          film: "adv_redsign.webm",
+          film: "12_adv_redsign.webm",
           heading: "Find a pure seam and the whole board is told",
           body:
             "A handful of squares on the map are PURE — 255, the richest "
@@ -342,7 +344,7 @@
             + "you find one.",
         },
         {
-          film: "adv_redsign_rival.webm",
+          film: "13_adv_redsign_rival.webm",
           heading: "A redsign you did not light",
           body:
             "The same mechanic from the other side. You probe your own "
@@ -370,7 +372,7 @@
       title: "Orbit — the cheap weapon, and the one that arrives first",
       chapters: [
         {
-          film: "adv_buy_snap.webm",
+          film: "14_adv_buy_snap.webm",
           heading: "A hundred blue buys one square of one hour",
           body:
             "Weapons are priced 100, 200, 300 — a SNAP, an EMP, a chaff "
@@ -396,7 +398,7 @@
       title: "Night three — the jackpot fight, and the beat that decides it",
       chapters: [
         {
-          film: "adv_smash_grab.webm",
+          film: "15_adv_smash_grab.webm",
           heading: "Smash and grab — take the pure you can see, and take "
             + "it badly",
           body:
@@ -421,7 +423,7 @@
             + "then take the jackpot and go.",
         },
         {
-          film: "adv_blind_grab.webm",
+          film: "16_adv_blind_grab.webm",
           heading: "Blind and grab — attack a jackpot you cannot see",
           body:
             "The other case: the beacon is lit and you have never been "
@@ -446,7 +448,7 @@
             + "and comb the smear while they are blind.",
         },
         {
-          film: "adv_snap.webm",
+          film: "17_adv_snap.webm",
           heading: "SNAP — the answer to the two grabs you just learned",
           body:
             "Both grabs have the same weak point, and it is not the "
@@ -484,7 +486,7 @@
       title: "Orbit — a second hull, and the dearest thing on the board",
       chapters: [
         {
-          film: "adv_buy_chaff.webm",
+          film: "18_adv_buy_chaff.webm",
           heading: "Chaff costs no credits, and more blue than you own",
           body:
             "A harvester first: two seams need two hulls, and by now you "
@@ -504,7 +506,7 @@
             + "granted blue.",
         },
         {
-          film: "adv_arms_bar.webm",
+          film: "19_adv_arms_bar.webm",
           heading: "Everyone can see what you are carrying",
           body:
             "Watch the station as the flare is built. The blue does not "
@@ -548,7 +550,7 @@
       title: "Last night — taking the clock, and taking the ride home",
       chapters: [
         {
-          film: "adv_emp.webm",
+          film: "20_adv_emp.webm",
           heading: "EMP does not take the red. It takes the clock — if you "
             + "are willing to wait for it.",
           body:
@@ -577,7 +579,7 @@
             + "it, and WAIT out your own cloud before you walk in.",
         },
         {
-          film: "adv_chaff.webm",
+          film: "21_adv_chaff.webm",
           heading: "Chaff denies three hours. Aimed at one, it kills.",
           body:
             "A flare jams every House for three hours — yours included, "
@@ -681,8 +683,13 @@
   }
 
   function isNarrating() {
-    try { return window.localStorage.getItem(NARRATE_KEY) === "1"; }
-    catch (e) { return false; }
+    // Unset means on. Only a deliberate toggle-off is remembered, so a
+    // first-timer hears the voice and anyone who turned it off keeps it
+    // off across chapters and sessions.
+    try {
+      var pref = window.localStorage.getItem(NARRATE_KEY);
+      return pref === null ? true : pref === "1";
+    } catch (e) { return false; }
   }
 
   function setNarrating(on) {
@@ -778,9 +785,11 @@
 
   /* ── Narration (v1.47) ──────────────────────────────────────────────
    *
-   * Films are shot silent and some are then narrated (see
-   * backstage/films/voice/). Three things the player does have to move
-   * together, and each has a reason that is not obvious:
+   * Films are shot silent and then narrated (see backstage/films/voice/).
+   * All twenty-one carry a voice track as of v1.48, but the player still
+   * asks each file rather than assuming: the next film someone adds will
+   * be silent until it is voiced, and it must not show a dead button.
+   * Three things have to move together, each for a non-obvious reason:
    *
    *   muted  — every film STARTS muted, always. Browsers refuse audible
    *            autoplay without a user gesture, and a video that is
@@ -851,8 +860,47 @@
         v.loop = true;
         try { v.play(); } catch (e) { /* ignore */ }
         paintNarrateBtn(true, false, true);
+        armNarrationRetry();
       });
     }
+  }
+
+  /* The gesture that earns audio does not have to be aimed at us.
+   *
+   * The modal auto-opens, so on a fresh navigation there is usually no
+   * user activation yet and the play() above is refused through no
+   * fault of the film. Waiting for a click on the narration button
+   * specifically is a bad trade: the button is telling the truth, but
+   * most people read a small button as decoration, and the cost of
+   * being ignored is twenty-one narrated films watched in silence. Any
+   * gesture anywhere in the document lifts the policy, so take the
+   * first one going and retry.
+   *
+   * The narrate button is the one thing excluded, because its own
+   * handler flips the preference a beat later — unmuting from here
+   * first would turn a "give me sound" click into "turn sound off". */
+  var narrationRetryArmed = false;
+
+  function onFirstGesture(ev) {
+    var t = ev && ev.target;
+    if (t instanceof Element && t.closest("[data-tut-narrate]")) return;
+    disarmNarrationRetry();
+    if (!isNarrating()) return;
+    var v = el && el.querySelector("video");
+    if (v && v.muted) applyNarration(v, true);
+  }
+
+  function armNarrationRetry() {
+    if (narrationRetryArmed) return;
+    narrationRetryArmed = true;
+    document.addEventListener("pointerdown", onFirstGesture, true);
+    document.addEventListener("keydown", onFirstGesture, true);
+  }
+
+  function disarmNarrationRetry() {
+    narrationRetryArmed = false;
+    document.removeEventListener("pointerdown", onFirstGesture, true);
+    document.removeEventListener("keydown", onFirstGesture, true);
   }
 
   /* A film, or an honest placeholder. `preload="auto"` and `loop` are
@@ -870,6 +918,12 @@
     v.src = FILM_BASE + chapter.film;
     v.autoplay = true;
     v.loop = true;
+    // Muted at birth, always — see the narration note above. Unmuting
+    // here instead looks like it works and does not: the poll below
+    // hands the element to applyNarration a moment later, which owns
+    // both flags, so an eager unmute buys a second of voice and then
+    // gets muted again mid-sentence on any browser that allowed it, and
+    // a film that never starts on any browser that did not.
     v.muted = true;
     v.playsInline = true;
     v.preload = "auto";

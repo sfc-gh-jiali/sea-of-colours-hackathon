@@ -1,7 +1,7 @@
 # Sea of Colours — Master Rulebook
 
-Version: 1.39
-Last updated: 2026-09-07
+Version: 1.48
+Last updated: 2026-09-13
 
 This is the single source of truth for the world, the fiction, and how
 play resolves. Every change is recorded in the [Changelog](#changelog) at
@@ -1786,6 +1786,38 @@ wreck. The rule applies to four concrete patterns:
    **original positions**, both spill all cargo. A collision scar is
    stamped at both cells.
 
+**Arriving is not the same as departing (§3.17.5, v1.48).** The rule
+above collides two harvesters **arriving** on one cell. A harvester
+that is *leaving* the cell during the same hour is not arriving, so
+there is nothing to collide with:
+
+- **Lift-and-land is not a collision.** House A drops (or steps) onto
+  a cell in the same hour that House B **picks up** the harvester
+  standing there. B's harvester lifts with its hold intact and banks
+  normally; A's lands cleanly and auto-harvests as usual. No damage,
+  no spill, no collision scar. Taking a cell a rival is vacating is a
+  legitimate — and intended — play.
+- **This is narrow.** It covers only the egress happening **this
+  hour**. A harvester with a pickup queued for a *later* hour is an
+  ordinary occupant right now and is rammed under §3.17.1/§3.17.3 in
+  full. Nor does it apply to a pickup that cannot happen (no such
+  harvester, the lifter is not in orbit, the harvester is already
+  orbital) — a lift that will not occur does not vacate anything.
+- **Chaff still stops the lift.** A seat whose slot is cancelled by
+  chaff (§4.9) does not lift, so its harvester stays an occupant and
+  the incoming move collides with it as normal.
+
+> **Known gap (v1.48).** The same reasoning plainly extends to a
+> harvester **stepping off** a cell as another steps or drops onto it,
+> and to two harvesters stepping into one empty cell. Those are *not*
+> yet resolved this way: the engine still settles them in the order it
+> happens to walk the seats, which contradicts §3.10 and §3.13. Unlike
+> a pickup, a step can be refused mid-hour (an EMP cloud, a snap-hot
+> cell, its own collision), so it cannot be settled at hour start
+> without ordering the moves by dependency. Tracked as
+> `docs/OUTSTANDING_ISSUES.md` #56; do not read the lift-and-land
+> ruling as already covering them.
+
 A harvester can collide with **its own House's** other harvester
 under the same rules (when multi-harvester loadouts arrive); the
 collision ring then renders in a single colour. Damage flag does
@@ -3028,6 +3060,50 @@ SOC_BACKEND=memory python scripts/run_season.py --seed 1
 ---
 
 ## Changelog
+
+### v1.48 — 2026-09-13
+
+**Lift-and-land was decided by seat index, not by the rules (§3.17.5).**
+
+§3.17 has always opened by colliding two harvesters *arriving* on one
+cell. The engine never implemented that sentence — it implemented the
+four illustrated patterns beneath it and, for everything else, asked
+the live board whether a cell was occupied at the moment it happened to
+get there. Because seats resolve in a fixed order (`p1` first, always,
+never shuffled), a rival landing on a cell you were lifting off
+resolved two different ways depending on which of you the loop reached
+first:
+
+- lift first — both sides clean, the hold banked;
+- drop first — **both harvesters wrecked and the entire hold spilled**.
+
+Same orders, same board, opposite outcome. §3.10 and §3.13 both say
+seat order is not a factor, so this was never a rule — it was an
+implementation detail casting a vote.
+
+Measured over the 141 stored seasons (731 player-days) in this repo,
+**176 days — 24% — contain at least one hour settled this way**, and
+the seat that resolves first is always the same one, so the egress risk
+fell entirely on one side of the table.
+
+- **Ruled: lift-and-land does not collide.** A harvester being lifted
+  is departing, not arriving. It banks its haul; the incoming harvester
+  takes the cell. This is what §3.17's governing sentence already said,
+  and what the shipped agent has always been told — V12's `SEEN_GRAB`
+  doctrine calls landing on a rival's worked cell a play where
+  "nothing about this is a gamble". The engine now agrees with both.
+- **Engine:** the hour loop takes an hour-start *egress* snapshot
+  before any seat acts, the occupancy sibling of the hour-start
+  *visibility* snapshot added in v0.9.17 for the same reason. Sound to
+  decide up front because every way a pickup can fail is a static
+  precondition that no rival can influence mid-hour.
+- **Deliberately narrow.** Only this hour's egress, only a pickup that
+  can actually happen, and not through chaff. A queued-for-later pickup
+  leaves an ordinary, rammable occupant. §3.17.1–§3.17.4 are unchanged.
+- **Not fixed here:** step-away and converging steps remain
+  order-dependent, because a step can be refused mid-hour and so cannot
+  be settled at hour start. Written up as a known gap under §3.17.5 and
+  tracked as issue #56 rather than left for someone to rediscover.
 
 ### v1.39 — 2026-09-07
 

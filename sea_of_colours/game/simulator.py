@@ -282,6 +282,22 @@ class NightSimulator:
                 sess, "_live_snapshot_this_hour", {},
             ) or {}
 
+            # v1.48 — hour-start EGRESS snapshot, the occupancy sibling of
+            # the visibility snapshot above and for the same reason
+            # (parallel resolution, §3.10). A harvester lifting off this
+            # hour is departing, not arriving, so §3.17 does not collide a
+            # lander with it. Taken before any seat acts so the outcome
+            # stops depending on which seat the loop reaches first.
+            sess._departing_units_this_hour = self._departing_harvesters(  # type: ignore[attr-defined]
+                sess, seats, queue_for, pointers, applied,
+                preempted=getattr(sess, "_preempted_seats_this_hour", set()),
+                chaff_active_until=chaff_active_until,
+                chaff_triggerers=chaff_triggerers_by_hour.get(
+                    current_hour, set(),
+                ),
+                current_hour=current_hour,
+            )
+
             preempted = getattr(sess, "_preempted_seats_this_hour", set())
             for p in seats:
                 if applied[p] >= MAX_MOVES:
@@ -463,6 +479,11 @@ class NightSimulator:
         if hasattr(sess, "_snap_hot_cells_this_hour"):
             try:
                 delattr(sess, "_snap_hot_cells_this_hour")
+            except AttributeError:
+                pass
+        if hasattr(sess, "_departing_units_this_hour"):
+            try:
+                delattr(sess, "_departing_units_this_hour")
             except AttributeError:
                 pass
 
@@ -757,10 +778,12 @@ class NightSimulator:
         attempted = _describe_move(move)
         emp_blocked_cells = getattr(sess, "_emp_established_cells_this_hour", None)
         snap_hot_cells = getattr(sess, "_snap_hot_cells_this_hour", None)
+        departing_units = getattr(sess, "_departing_units_this_hour", None)
         caption, tag, side = self._apply_one(
             sess, owner, move, hour=hour, live_override=live_override,
             emp_blocked_cells=emp_blocked_cells,
             snap_hot_cells=snap_hot_cells,
+            departing_units=departing_units,
         )
         if tag == "waste":
             # v0.9.9 — illegal-at-runtime move (legal shape, but the
@@ -1293,6 +1316,73 @@ class NightSimulator:
             for p in queue_for.keys()
         }
 
+    def _departing_harvesters(
+        self,
+        sess: "GameSession",
+        seats: Tuple[str, ...],
+        queue_for: Dict[str, List[Move]],
+        pointers: Dict[str, int],
+        applied: Dict[str, int],
+        *,
+        preempted: AbstractSet[str],
+        chaff_active_until: int,
+        chaff_triggerers: AbstractSet[str],
+        current_hour: int,
+    ) -> Set[str]:
+        """Harvesters that will leave the surface during ``current_hour``.
+
+        v1.48 (RULEBOOK §3.17) — a harvester being lifted is *departing*,
+        and §3.17 collides two harvesters **arriving** on one cell. A
+        lander therefore takes a cell its rival is lifting off without a
+        collision, which is what the rulebook has always said and what
+        the shipped agent has always been told (V12's SEEN_GRAB doctrine:
+        "drop on it, auto-harvest, and lift").
+
+        Decided at hour start, before any seat acts, because the bug this
+        closes was that the answer depended on whether the engine's seat
+        loop reached the lifter or the lander first — an implementation
+        detail with no rules standing (§3.10, §3.13). See
+        docs/OUTSTANDING_ISSUES.md #56.
+
+        Deciding it up front is only sound because **every way a pickup
+        can fail is a static precondition** — no such harvester, lifter
+        not in orbit, harvester already orbital. None of them depend on
+        what another seat does this hour, so a pickup promised now cannot
+        be falsified later and leave a lander sharing a cell with a unit
+        that never left. Step-aways do NOT have that property (a step can
+        be refused by an EMP cloud, a snap-hot cell or its own collision),
+        which is why they are not in here and are still order-dependent.
+        """
+        from sea_of_colours.game.session import cast_player
+
+        leaving: Set[str] = set()
+        for p in seats:
+            if applied[p] >= MAX_MOVES:
+                continue
+            if p in preempted:
+                # Already acted in the pre-hour phase; this seat's next
+                # queued move belongs to a LATER hour.
+                continue
+            if current_hour <= chaff_active_until and p not in chaff_triggerers:
+                # Chaff cancels this seat's slot, so nothing lifts.
+                continue
+            move, _ = _next_actionable(queue_for[p], pointers[p])
+            if not isinstance(move, PickupMove):
+                continue
+            # Mirror try_pickup_unit's preconditions exactly.
+            hh = sess.entities.get(move.unit)
+            if hh is None or hh.entity_type != "harvester":
+                continue
+            if hh.owner != p:
+                continue
+            if hh.x is None:
+                continue
+            lf = sess.lifter_for(cast_player(p))
+            if lf is None or lf.x is not None:
+                continue
+            leaving.add(hh.id)
+        return leaving
+
     def _maybe_resolve_swap_collision(
         self,
         sess: "GameSession",
@@ -1513,6 +1603,7 @@ class NightSimulator:
         live_override: Optional[set] = None,
         emp_blocked_cells: Optional[set] = None,
         snap_hot_cells: Optional[dict] = None,
+        departing_units: Optional[AbstractSet[str]] = None,
     ) -> tuple[str, str, List[str]]:
         """Apply one move; return ``(caption, tag, side_messages)``.
 
@@ -1556,6 +1647,7 @@ class NightSimulator:
                 live_override=live_override,
                 emp_blocked_cells=emp_blocked_cells,
                 snap_hot_cells=snap_hot_cells,
+                departing_units=departing_units,
             )
             if not ok:
                 return msg, "waste", side
@@ -1572,6 +1664,7 @@ class NightSimulator:
                 owner, move.unit, move.to[0], move.to[1],
                 emp_blocked_cells=emp_blocked_cells,
                 snap_hot_cells=snap_hot_cells,
+                departing_units=departing_units,
             )
             if not ok:
                 return msg, "waste", side
