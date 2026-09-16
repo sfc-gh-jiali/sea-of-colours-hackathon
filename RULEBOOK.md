@@ -1,7 +1,7 @@
 # Sea of Colours — Master Rulebook
 
-Version: 1.48
-Last updated: 2026-09-13
+Version: 1.49
+Last updated: 2026-09-14
 
 This is the single source of truth for the world, the fiction, and how
 play resolves. Every change is recorded in the [Changelog](#changelog) at
@@ -1153,6 +1153,13 @@ grammar but massively simplified:
   rides over the probe's tile**, at which point the probe is crushed —
   regardless of which House owns it or which House owns the harvester.
   The last recorded snapshot remains in the owner's echo intel as usual.
+  **Order within the hour does not matter (v1.49):** a probe launched
+  onto a cell a harvester is landing on the same hour is crushed just
+  the same, and so is one that finds a harvester already parked there.
+  A probe and a harvester never share a tile at the end of an hour.
+  The launch itself is not refused — it flies, it is public (§3.15),
+  and it supersedes any older probe on the cell (§3.16) before the
+  harvester's weight settles on it.
   **Optional decay (`SOC_PROBE_LIFETIME_NIGHTS=K`, v0.9.17):** when set,
   a probe also **expires at Aurora** once it has been on the surface for
   `K` Nox — its disk drops to echo exactly like a crush, the owner
@@ -1757,7 +1764,9 @@ committing.
 Two harvesters arriving on the **same cell** during a Nox, or
 crossing paths on a pass-through swap, **damage each other**. This
 is NOT the probe rule — harvesters do not vaporise on contact, they
-wreck. The rule applies to four concrete patterns:
+wreck. The rule applies to four concrete patterns, and to three further
+cases ruled on beneath them — converging steps (§3.17.6) and the two
+egress exceptions, lifting off (§3.17.5) and stepping off (§3.17.7):
 
 1. **Drop-on collision.** Player B drops a harvester onto a cell
    already occupied by Player A's healthy harvester. The drop
@@ -1807,16 +1816,45 @@ there is nothing to collide with:
   chaff (§4.9) does not lift, so its harvester stays an occupant and
   the incoming move collides with it as normal.
 
-> **Known gap (v1.48).** The same reasoning plainly extends to a
-> harvester **stepping off** a cell as another steps or drops onto it,
-> and to two harvesters stepping into one empty cell. Those are *not*
-> yet resolved this way: the engine still settles them in the order it
-> happens to walk the seats, which contradicts §3.10 and §3.13. Unlike
-> a pickup, a step can be refused mid-hour (an EMP cloud, a snap-hot
-> cell, its own collision), so it cannot be settled at hour start
-> without ordering the moves by dependency. Tracked as
-> `docs/OUTSTANDING_ISSUES.md` #56; do not read the lift-and-land
-> ruling as already covering them.
+**Converging steps (§3.17.6, v1.49).** Two or more harvesters stepping
+into the **same cell** on the same hour is the plainest case of §3.17's
+opening sentence, and it resolves like the other two step patterns:
+
+- **Nobody arrives.** Every converging move is cancelled and each
+  harvester **wrecks where it stood**, spilling all cargo — exactly as
+  §3.17.3 and §3.17.4 leave their steppers.
+- **The scar goes on the contested cell**, not on the origins,
+  following §3.17.2 — the other pattern where a destination is fought
+  over and no one reaches it.
+- **A healthy occupant is rammed too** and wrecks in place, without
+  spending an action; it was not acting, it was run into. It makes no
+  difference how many came at it.
+- It takes **two arrivals** to make a collision. One harvester stepping
+  onto an empty cell is just a step.
+
+**Stepping off is departing too (§3.17.7, v1.49).** §3.17.5 covers a
+harvester *lifting* off a cell. A harvester **stepping** off one is
+departing in exactly the same sense, and the cell it leaves may be
+taken the same hour — by a step or by a landing.
+
+- **Hand-offs work.** A steps onto the cell B is stepping off; both
+  moves succeed, no damage, no scar. Taking ground a rival is giving
+  up is a legitimate play, as it is for a lift.
+- **Convoys work, to any length.** If A follows B who follows C into
+  open ground, the whole column advances on the one hour.
+- **A ring rotates.** Four or more harvesters each moving into the next
+  one's cell all move: every destination is being vacated by someone
+  who is themselves leaving. Note this needs **four** units — the grid
+  is bipartite, so there is no shorter cycle — and that the two-unit
+  case is a pass-through swap, which §3.17.4 collides instead.
+- **A refusal propagates backwards.** If the harvester at the head of a
+  column cannot move, nobody behind it moves either, and the cell none
+  of them left stays held. A cell is only free if its occupant
+  genuinely leaves: a step cancelled by chaff, smothered by an EMP, or
+  refused for a full hold vacates nothing.
+- **It does not repeal §3.17.6.** If two rivals both step onto the cell
+  a third is stepping off, the third gets away and *the two arrivals
+  wreck each other* over the empty square.
 
 A harvester can collide with **its own House's** other harvester
 under the same rules (when multi-harvester loadouts arrive); the
@@ -1883,11 +1921,16 @@ window for trails (§3.12).
 
 **Replay accounting.** Each collision pushes a single replay frame
 with ``tag = "drop"`` (drop-on / step-into), ``tag =
-"collision_swap"`` (pass-through), or ``tag =
-"collision_simultaneous_drops"`` (simultaneous drops), carrying a
+"collision_swap"`` (pass-through), ``tag =
+"collision_simultaneous_drops"`` (simultaneous drops), or ``tag =
+"collision_converging_steps"`` (converging steps, v1.49), carrying a
 structured ``collisions: [{type, at, owners, harvesters}]`` payload
 so the client can replay the impact ring animation in the
-appropriate House colours.
+appropriate House colours. The end-of-hour probe sweep (§3.11.1,
+v1.49) uses the same shape one level down: an ownerless
+``tag = "probe_crushed"`` frame carrying ``crushed_probes``, which is
+the payload the mover's own frame has carried since v0.7.4 and which
+drives the pixel-splash either way.
 
 #### 3.17.1 Wreckage glyph + co-occupancy
 
@@ -3060,6 +3103,77 @@ SOC_BACKEND=memory python scripts/run_season.py --seed 1
 ---
 
 ## Changelog
+
+### v1.49 — 2026-09-14
+
+**Converging steps, and two more places seat index was deciding
+things (§3.17.6).**
+
+v1.48 fixed lift-and-land and left the rest of §3.17's unillustrated
+cases open. This closes two of them and adds the rule that was missing.
+
+- **Two harvesters stepping into one cell now both wreck where they
+  stood (§3.17.6).** This is the plainest reading of §3.17's opening
+  sentence and it was not one of the four illustrated patterns, so it
+  fell through to the ordinary seat loop — where the first seat walked
+  **completed its step and took the cell**, and only the second was
+  turned back. Both wrecked either way; what seat index decided was
+  where the survivorless wreck sat and where the scar was stamped. The
+  scar now goes on the contested cell (§3.17.2's convention for a
+  destination nobody reaches) and the harvesters wreck at their
+  origins (§3.17.3 and §3.17.4's convention for a cancelled step).
+- **A healthy occupant of the contested cell is rammed by all of
+  them.** It used to be rammed by whichever stepper the loop reached
+  first, after which the second strolled on unharmed — a wreck does
+  not block (§3.17.1), so the first collision cleared the way for the
+  second. Three or more arrivals settle as one event.
+- **Everything contended on one hour is now recorded on that hour.**
+  The contention pre-passes handled one collision and handed back to
+  the round loop for the next, but the loop takes its clock from the
+  moves already applied, so a second unrelated pile-up was written
+  down an hour late — and the pair on the lower seats always kept the
+  earlier hour. The board was never wrong; the account of the night
+  was. Reachable only with three or four seats.
+
+- **Stepping off a cell now vacates it, like lifting off (§3.17.7).**
+  v1.48 declined to extend the egress rule to steps, on the grounds
+  that a step can be refused part-way through an hour so "will that
+  cell be free?" could not be answered in advance. It can. Reading
+  `try_step_unit` from the top, the only refusal that depends on
+  another seat is a collision at the step's own destination; every
+  other one is static, and the two dynamic gates above it — chaff and
+  an EMP-smothered unit — are already settled before the round.
+  Everything after the collision check moves the harvester
+  unconditionally (a snap-hot cell cripples it where it lands, a cloud
+  denies it the harvest; neither rewinds the step). So the engine now
+  solves it as a fixpoint instead of a race: a step into free space
+  goes, a step into a cell someone else is vacating goes, a refusal
+  propagates back down the column behind it, and what remains with
+  nobody stationary to blame is a ring, which is allowed. Hand-offs,
+  convoys of any length and rotations of four or more all resolve;
+  a two-unit ring is a pass-through swap and §3.17.4 still collides it.
+
+- **A probe never ends the hour under a harvester (§3.11.1).** The last
+  of the six. §3.11.1 has always crushed a probe a harvester rides
+  over, and the engine did it inside the mover's own slot — right for
+  the ordinary case, wrong when the probe launches onto the cell on the
+  *same* hour, because then the answer came down to seat index. Prober
+  first and the probe was flattened by the landing behind it; harvester
+  first and the probe settled underneath one and lived. A sweep at the
+  close of every hour now crushes whatever is left buried, so the two
+  orders agree. The launch is still not refused and still supersedes an
+  older probe on the cell (§3.16) on its way in. New `probe_crushed`
+  replay tag, ownerless like the joint collisions; a cell holding more
+  than one harvester is a wreck pile and credits the crush to nobody.
+
+Nothing above changes what a *legal* move does. Added the
+`collision_converging_steps` replay tag, and `converging_steps` as a
+collision event type.
+
+**Issue #56 is closed.** All six seat-order dependencies found by the
+differential harness are fixed, and `tests/test_seat_order_is_not_a_factor.py`
+carries no xfail: every scenario in it is required to produce the same
+answer under all 2-, 3- and 4-seat role permutations.
 
 ### v1.48 — 2026-09-13
 

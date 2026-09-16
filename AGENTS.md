@@ -65,6 +65,30 @@ This file is always-on context for AI agents; keep it lean and current.
   **`guide/leader.html` is the same document rendered** — a fan-out
   pair, so change both. The HTML is self-contained (it must open off
   disk) and sits beside `guide/index.html`, which links to it.
+- `guide/weapons.html` — the third guide, and the one for the day's
+  actual exercise: the **eleven links** between blue in the ground and a
+  salvo in the air, as a tab per stage. It exists because "teach your
+  agent to use weapons" is not one change, it is eleven, and each is
+  invisible until the one before it works — so a team that writes
+  doctrine on day one observes nothing and concludes the model is the
+  problem. Self-contained like its two siblings, both of which link to
+  it.
+  Two things it is deliberately careful about, because both are
+  routinely got wrong. It splits Act 3 into **build the geometry → offer
+  it → price it → compile it**, because the aim points are computed by
+  heuristic Python *before* the prompt exists (`harness.py` step 4, the
+  hint compilers) and the model only ever picks an ID — "the option is
+  offered and the model picks it" skips the stage where the work is. And
+  it separates **weapon doctrine** (prose in `doctrine.py`, judgement)
+  from **move doctrine** (a declared play, one specific move), since a
+  fork needs both and writing one explains why nothing changed.
+  **A fan-out surface with two edges**: it quotes weapon prices and
+  the blue cap from `game/weapons.py`, and it reproduces `soc weapons`
+  output verbatim, so a retune or a reworded rung strands it. Every
+  code snippet in it is real and pasted from the tree. It is a static
+  page and cannot report its own breakage — the stages live in a JS
+  array, so a broken one renders a tidy page with nothing in it. Run
+  `backstage/probes/_probe_weapons_guide.py` after touching it.
 
 ## Run & test
 

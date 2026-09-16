@@ -1,0 +1,2686 @@
+<!doctype html>
+<!--
+  sea_of_colours · teaching an agent to use weapons
+
+  Self-contained on purpose, exactly like index.html and leader.html: an
+  attendee opens this straight out of the folder, so it may not depend on
+  a build step, a server, or any sibling asset. Cross-links stay relative
+  (./index.html, ../manual/agent.html) so they resolve both off disk and
+  under the server's /guide/ mount.
+
+  Palette and chrome are lifted from guide/index.html so the three
+  documents read as one publication. The structure differs on purpose:
+  index.html is a SEQUENCE (install, then run, then play), this is a
+  CHAIN (eleven links, each invisible until the one before it works), so
+  centrepiece is a tab player over the links rather than numbered scenes.
+
+  EVERY code snippet here is real and was read out of the tree, not
+  paraphrased. The numbers in §02 come from game/weapons.py and
+  game/session.py — if a dial is retuned, they are a fan-out surface.
+  So is the ladder output in §03: it is literal `soc weapons` output.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sea_of_colours · teaching weapons</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=VT323&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ══ tokens — same set as guide/index.html ════════════════════ */
+      :root {
+        --bg: #0d0d12;
+        --panel-bg: #0d0d12;
+        --panel-raise: #131319;
+        --fg: #f0f6fc;
+        --dim: #a8b1bd;
+        --frame: #4a4a5a;
+        --frame-soft: #2a2a35;
+
+        --green: #4dca5e;
+        --red: #ff8585;
+        --blue: #7ab8ff;
+        --amber: #ffc857;
+        --violet: #c9a0ff;
+
+        --mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas',
+          'Menlo', ui-monospace, monospace;
+        --retro: 'VT323', 'JetBrains Mono', ui-monospace, monospace;
+
+        --topbar-h: 34px;
+        --nav-h: 40px;
+      }
+
+      * { box-sizing: border-box; }
+
+      html {
+        scroll-behavior: smooth;
+        scroll-padding-top: calc(var(--topbar-h) + var(--nav-h) + 18px);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--mono);
+        font-size: 14px;
+        line-height: 1.65;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      a { color: var(--blue); text-decoration: none; border-bottom: 1px dotted currentColor; }
+      a:hover { color: var(--green); }
+      b, strong { font-weight: 500; color: var(--fg); }
+      em { color: var(--fg); font-style: italic; }
+      .dim { color: var(--dim); }
+      .fg-green { color: var(--green); }
+      .fg-red { color: var(--red); }
+      .fg-blue { color: var(--blue); }
+      .fg-amber { color: var(--amber); }
+      .fg-violet { color: var(--violet); }
+
+      /* ══ top bar ══════════════════════════════════════════════════ */
+      .gd-topbar {
+        position: fixed;
+        inset: 0 0 auto 0;
+        height: var(--topbar-h);
+        display: flex;
+        align-items: center;
+        gap: 0.5ch;
+        padding: 0 14px;
+        background: var(--panel-bg);
+        border-bottom: 1px solid var(--frame);
+        font-size: 13px;
+        z-index: 60;
+      }
+      .prompt-sigil { color: var(--green); }
+      .prompt-caret {
+        color: var(--green);
+        animation: gd-blink 1.1s steps(2, start) infinite;
+      }
+      @keyframes gd-blink { to { opacity: 0; } }
+      .gd-spacer { flex: 1; }
+      .gd-topbar .gd-manual-link {
+        border: 1px solid var(--frame);
+        border-bottom-style: solid;
+        color: var(--dim);
+        padding: 2px 9px;
+        font-size: 12px;
+        letter-spacing: 0.04em;
+      }
+      .gd-topbar .gd-manual-link:hover { color: var(--green); border-color: var(--green); }
+      @media (max-width: 720px) { .gd-topbar .gd-hide-sm { display: none; } }
+
+      .gd-progress {
+        position: fixed;
+        top: var(--topbar-h);
+        left: 0;
+        height: 2px;
+        width: 0;
+        background: var(--green);
+        z-index: 61;
+        transition: width 0.08s linear;
+      }
+
+      /* ══ section nav ══════════════════════════════════════════════ */
+      .gd-nav {
+        position: fixed;
+        top: var(--topbar-h);
+        left: 0;
+        right: 0;
+        height: var(--nav-h);
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 0 10px;
+        background: var(--panel-bg);
+        border-bottom: 1px solid var(--frame);
+        overflow-x: auto;
+        scrollbar-width: none;
+        z-index: 55;
+      }
+      .gd-nav::-webkit-scrollbar { display: none; }
+      .gd-nav a {
+        flex: none;
+        border: 1px solid transparent;
+        color: var(--dim);
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        padding: 4px 9px;
+        white-space: nowrap;
+      }
+      .gd-nav a:hover { color: var(--fg); border-color: var(--frame); }
+      .gd-nav a.is-active { color: var(--green); border-color: var(--green); }
+
+      /* ══ hero ═════════════════════════════════════════════════════ */
+      .gd-hero {
+        padding: calc(var(--topbar-h) + var(--nav-h) + 48px) 24px 46px;
+        max-width: 1080px;
+        margin: 0 auto;
+        text-align: center;
+      }
+      .gd-eyebrow {
+        color: var(--dim);
+        font-size: 12px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+      }
+      .gd-hero h1 {
+        font-family: var(--retro);
+        font-size: clamp(48px, 10vw, 104px);
+        line-height: 0.9;
+        margin: 14px 0 6px;
+        letter-spacing: 0.02em;
+        color: var(--fg);
+        text-shadow: 0 0 26px rgba(255, 200, 87, 0.16);
+      }
+      .gd-hero h1 .sep { color: var(--amber); }
+      .gd-hero .gd-sub { color: var(--dim); font-size: 15px; margin: 0 0 26px; }
+      .gd-hero .gd-lede {
+        max-width: 70ch;
+        margin: 0 auto 26px;
+        text-align: left;
+        color: var(--fg);
+      }
+      .gd-cta { display: inline-flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+      .gd-btn {
+        border: 1px solid var(--frame);
+        color: var(--dim);
+        padding: 8px 16px;
+        font-size: 13px;
+        letter-spacing: 0.06em;
+      }
+      .gd-btn:hover { color: var(--green); border-color: var(--green); }
+      .gd-btn--primary { color: var(--amber); border-color: var(--amber); }
+      .gd-btn--primary:hover { background: rgba(255, 200, 87, 0.08); }
+
+      /* ══ scenes ═══════════════════════════════════════════════════ */
+      main { max-width: 1080px; margin: 0 auto; padding: 0 24px 96px; }
+      .gd-scene { padding: 46px 0 10px; }
+      .gd-kicker {
+        color: var(--green);
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        margin: 0 0 6px;
+      }
+      .gd-scene h2 {
+        font-family: var(--retro);
+        font-size: 40px;
+        font-weight: 400;
+        letter-spacing: 0.02em;
+        margin: 0 0 10px;
+        color: var(--fg);
+      }
+      .gd-scene h3 {
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--fg);
+        margin: 26px 0 8px;
+      }
+      .gd-scene > .gd-lede { max-width: 74ch; color: var(--dim); margin: 0 0 22px; }
+      .gd-scene > .gd-lede strong { color: var(--fg); }
+
+      .reveal { opacity: 0; transform: translateY(10px); transition: opacity .5s ease, transform .5s ease; }
+      .reveal.is-in { opacity: 1; transform: none; }
+      @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } }
+
+      /* ══ frame ════════════════════════════════════════════════════ */
+      .gd-frame {
+        border: 1px solid var(--frame);
+        background: var(--panel-bg);
+        padding: 12px 14px 16px;
+        margin: 0 0 16px;
+      }
+      .gd-frame-head {
+        display: flex;
+        align-items: baseline;
+        gap: 1ch;
+        margin-bottom: 12px;
+        padding-bottom: 7px;
+        border-bottom: 1px dashed var(--frame);
+      }
+      .gd-frame-title {
+        color: var(--fg);
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .gd-frame-sub { color: var(--dim); font-size: 12px; margin-left: auto; }
+      .gd-frame p { margin: 0 0 10px; }
+      .gd-frame p:last-child { margin-bottom: 0; }
+      .gd-frame ul, .gd-frame ol { margin: 0 0 10px; padding-left: 2.2ch; }
+      .gd-frame li { margin-bottom: 5px; }
+      .gd-frame li::marker { color: var(--green); }
+
+      /* ══ terminal / code block ════════════════════════════════════ */
+      .gd-term {
+        position: relative;
+        border: 1px solid var(--frame-soft);
+        background: #08070d;
+        padding: 10px 12px;
+        margin: 0 0 12px;
+        overflow-x: auto;
+      }
+      .gd-term pre {
+        margin: 0;
+        font-family: var(--mono);
+        font-size: 12.5px;
+        line-height: 1.6;
+        white-space: pre;
+      }
+      .gd-term .c { color: var(--dim); }
+      .gd-term .s { color: var(--green); }
+      .gd-term .o { color: var(--dim); }
+      .gd-term .k { color: var(--blue); }
+      .gd-term .w { color: var(--amber); }
+      .gd-term .r { color: var(--red); }
+      .gd-copy {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        border: 1px solid var(--frame);
+        background: var(--bg);
+        color: var(--dim);
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        padding: 2px 7px;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.15s;
+      }
+      .gd-term:hover .gd-copy, .gd-copy:focus-visible { opacity: 1; }
+      .gd-copy:hover { color: var(--green); border-color: var(--green); }
+
+      /* source file header above a code block */
+      .wp-src {
+        display: flex;
+        align-items: baseline;
+        gap: 1ch;
+        border: 1px solid var(--frame-soft);
+        border-bottom: none;
+        background: var(--panel-raise);
+        padding: 4px 10px;
+        font-size: 11.5px;
+        color: var(--dim);
+        letter-spacing: 0.03em;
+        overflow-x: auto;
+        white-space: nowrap;
+      }
+      .wp-src .path { color: var(--amber); }
+      .wp-src .sym { margin-left: auto; color: var(--frame); flex: none; padding-left: 2ch; }
+      .wp-src + .gd-term { margin-bottom: 14px; }
+
+      /* python-ish colouring inside .gd-term */
+      .gd-term .py-kw { color: #ff9ed8; }
+      .gd-term .py-st { color: var(--green); }
+      .gd-term .py-cm { color: #6b7280; font-style: italic; }
+      .gd-term .py-fn { color: var(--blue); }
+      .gd-term .py-nu { color: var(--amber); }
+      /* Line highlights hug the code rather than spanning the gutter.
+         The obvious inline-block + negative-margin trick double-indents
+         any line that is itself indented, because the span still starts
+         after the leading whitespace in the <pre>. */
+      .gd-term .py-hl,
+      .gd-term .py-ok {
+        border-left: 2px solid;
+        padding: 0 4px 0 5px;
+      }
+      .gd-term .py-hl {
+        background: rgba(255, 133, 133, 0.15);
+        border-left-color: var(--red);
+      }
+      .gd-term .py-ok {
+        background: rgba(77, 202, 94, 0.13);
+        border-left-color: var(--green);
+      }
+
+      /* ══ callouts ═════════════════════════════════════════════════ */
+      .gd-note {
+        border-left: 2px solid var(--frame);
+        background: rgba(255, 255, 255, 0.017);
+        padding: 9px 13px;
+        margin: 0 0 12px;
+        font-size: 13.5px;
+      }
+      .gd-note b.tag {
+        display: block;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        margin-bottom: 3px;
+      }
+      .gd-note--ok { border-left-color: var(--green); }
+      .gd-note--ok b.tag { color: var(--green); }
+      .gd-note--warn { border-left-color: var(--amber); }
+      .gd-note--warn b.tag { color: var(--amber); }
+      .gd-note--stop { border-left-color: var(--red); }
+      .gd-note--stop b.tag { color: var(--red); }
+      .gd-note--info { border-left-color: var(--blue); }
+      .gd-note--info b.tag { color: var(--blue); }
+      .gd-note p { margin: 0 0 7px; }
+      .gd-note p:last-child { margin-bottom: 0; }
+
+      .gd-check {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        border: 1px dashed var(--green);
+        padding: 9px 13px;
+        margin: 0 0 12px;
+        font-size: 13.5px;
+      }
+      .gd-check .mark { color: var(--green); flex: none; }
+
+      /* ══ the chain visual ═════════════════════════════════════════ */
+      .wp-chain { margin: 0 0 18px; }
+      .wp-act {
+        border: 1px solid var(--frame-soft);
+        border-left-width: 2px;
+        padding: 9px 11px 11px;
+        margin-bottom: 8px;
+        background: var(--panel-bg);
+      }
+      .wp-act-head {
+        display: flex;
+        align-items: baseline;
+        gap: 1ch;
+        margin-bottom: 8px;
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+      .wp-act-head .who { color: var(--dim); margin-left: auto; letter-spacing: 0.04em; text-transform: none; font-size: 11.5px; }
+      .wp-links { display: flex; flex-wrap: wrap; gap: 6px; }
+      .wp-link {
+        flex: 1 1 190px;
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        border: 1px solid var(--frame-soft);
+        background: transparent;
+        color: var(--fg);
+        font-family: var(--mono);
+        font-size: 12.5px;
+        line-height: 1.45;
+        text-align: left;
+        padding: 7px 9px;
+        cursor: pointer;
+      }
+      .wp-link:hover { border-color: var(--fg); }
+      .wp-link .n {
+        flex: none;
+        color: var(--frame);
+        font-size: 11px;
+        min-width: 2ch;
+        padding-top: 1px;
+      }
+      .wp-link .tx { flex: 1; }
+      .wp-link .st {
+        flex: none;
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        padding-top: 2px;
+      }
+      .wp-link .st.no { color: var(--red); }
+      .wp-link .st.yes { color: var(--green); }
+      .wp-link .st.part { color: var(--amber); }
+
+      .wp-act--money { border-left-color: var(--blue); }
+      .wp-act--money .wp-act-head { color: var(--blue); }
+      .wp-act--know { border-left-color: var(--amber); }
+      .wp-act--know .wp-act-head { color: var(--amber); }
+      .wp-act--move { border-left-color: var(--green); }
+      .wp-act--move .wp-act-head { color: var(--green); }
+      .wp-act--back { border-left-color: var(--violet); }
+      .wp-act--back .wp-act-head { color: var(--violet); }
+
+      /* ══ tab player ═══════════════════════════════════════════════ */
+      .wp-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-bottom: 14px;
+      }
+      .wp-tab {
+        border: 1px solid var(--frame);
+        background: transparent;
+        color: var(--dim);
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.03em;
+        padding: 4px 9px;
+        cursor: pointer;
+      }
+      .wp-tab:hover { color: var(--fg); }
+      .wp-tab .n { color: var(--frame); margin-right: 0.7ch; }
+      .wp-tab.is-on { color: var(--fg); border-color: currentColor; }
+      .wp-tab.is-on .n { color: inherit; }
+      .wp-tab[data-act="money"].is-on { color: var(--blue); }
+      .wp-tab[data-act="know"].is-on { color: var(--amber); }
+      .wp-tab[data-act="move"].is-on { color: var(--green); }
+      .wp-tab[data-act="back"].is-on { color: var(--violet); }
+
+      .wp-panel { border: 1px solid var(--frame); background: var(--panel-bg); }
+      .wp-panel-head {
+        display: flex;
+        align-items: baseline;
+        gap: 1ch;
+        flex-wrap: wrap;
+        padding: 11px 14px 9px;
+        border-bottom: 1px dashed var(--frame);
+      }
+      .wp-panel-head .stage {
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--dim);
+      }
+      .wp-panel-head h3 {
+        font-family: var(--retro);
+        font-size: 30px;
+        font-weight: 400;
+        letter-spacing: 0.02em;
+        margin: 0;
+        color: var(--fg);
+        text-transform: none;
+        width: 100%;
+      }
+      .wp-panel-head .badge {
+        font-size: 10.5px;
+        letter-spacing: 0.1em;
+        border: 1px solid currentColor;
+        padding: 1px 7px;
+      }
+      .wp-badge--no { color: var(--red); }
+      .wp-badge--yes { color: var(--green); }
+      .wp-badge--part { color: var(--amber); }
+
+      .wp-panel-body {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+        gap: 0;
+      }
+      @media (max-width: 900px) { .wp-panel-body { grid-template-columns: 1fr; } }
+      .wp-col { padding: 14px; min-width: 0; }
+      .wp-col--say { border-right: 1px dashed var(--frame-soft); }
+      @media (max-width: 900px) {
+        .wp-col--say { border-right: none; border-bottom: 1px dashed var(--frame-soft); }
+      }
+      .wp-col p { margin: 0 0 10px; }
+      .wp-col p:last-child { margin-bottom: 0; }
+      .wp-h {
+        font-size: 10.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--dim);
+        margin: 0 0 6px;
+        padding-bottom: 4px;
+        border-bottom: 1px solid var(--frame-soft);
+      }
+      .wp-h--first { margin-top: 0; }
+      .wp-col .wp-h { margin-top: 18px; }
+      .wp-col .wp-h.wp-h--first { margin-top: 0; }
+      .wp-say { font-size: 14.5px; color: var(--fg); }
+      .wp-say .q { color: var(--amber); }
+
+      .wp-nav {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 10px 14px;
+        border-top: 1px dashed var(--frame);
+      }
+      .gd-ctl {
+        border: 1px solid var(--frame);
+        background: transparent;
+        color: var(--dim);
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        padding: 4px 10px;
+        cursor: pointer;
+      }
+      .gd-ctl:hover { color: var(--green); border-color: var(--green); }
+      .gd-status { color: var(--dim); font-size: 12px; margin-left: auto; text-align: right; }
+
+      /* ══ economy visuals ══════════════════════════════════════════ */
+      .wp-capbar { margin: 4px 0 6px; }
+      .wp-capbar .track {
+        display: flex;
+        height: 30px;
+        border: 1px solid var(--frame);
+        overflow: hidden;
+      }
+      .wp-capbar .seg {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11.5px;
+        letter-spacing: 0.06em;
+        color: #08070d;
+        font-weight: 500;
+      }
+      .wp-capbar .seg--emp { background: var(--blue); flex: 200; }
+      .wp-capbar .seg--chaff { background: var(--violet); flex: 300; }
+      .wp-capbar .seg--snap { background: var(--amber); flex: 100; }
+      .wp-capbar .scale {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: var(--dim);
+        margin-top: 3px;
+      }
+
+      .wp-diamond {
+        font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.25;
+        white-space: pre;
+        color: var(--dim);
+        border: 1px solid var(--frame-soft);
+        background: #08070d;
+        padding: 12px;
+        overflow-x: auto;
+      }
+      .wp-diamond b { color: var(--blue); font-weight: 400; }
+      .wp-diamond i { color: var(--red); font-style: normal; }
+      .wp-diamond u { color: var(--amber); text-decoration: none; }
+
+      .wp-two {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 14px;
+      }
+      @media (max-width: 820px) { .wp-two { grid-template-columns: 1fr; } }
+
+      /* ══ who-does-what pipeline strip ═════════════════════════════
+         Colour code is lifted from manual/agent.html on purpose: blue
+         is the engine, green is our Python, amber is the model. Anyone
+         who read the agent guide already knows how to read this. ══ */
+      .wp-pipe {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        align-items: stretch;
+        margin: 0 0 12px;
+      }
+      .wp-pipe-step {
+        flex: 1 1 130px;
+        border: 1px solid var(--frame-soft);
+        border-top-width: 2px;
+        padding: 7px 9px;
+        font-size: 12px;
+        line-height: 1.4;
+        min-width: 0;
+      }
+      .wp-pipe-step .who {
+        display: block;
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        margin-bottom: 3px;
+      }
+      .wp-pipe-step .what { color: var(--fg); }
+      .wp-pipe-step .where {
+        display: block;
+        margin-top: 4px;
+        color: var(--dim);
+        font-size: 11px;
+        word-break: break-word;
+      }
+      .wp-pipe-step--py { border-top-color: var(--green); }
+      .wp-pipe-step--py .who { color: var(--green); }
+      .wp-pipe-step--ai { border-top-color: var(--amber); }
+      .wp-pipe-step--ai .who { color: var(--amber); }
+      .wp-pipe-step--en { border-top-color: var(--blue); }
+      .wp-pipe-step--en .who { color: var(--blue); }
+
+      /* ══ doctrine gallery ═════════════════════════════════════════ */
+      .wp-doc {
+        border: 1px solid var(--frame-soft);
+        background: #08070d;
+        padding: 0;
+        margin: 0 0 12px;
+      }
+      .wp-doc-head {
+        display: flex;
+        align-items: baseline;
+        gap: 1ch;
+        padding: 5px 11px;
+        background: var(--panel-raise);
+        border-bottom: 1px solid var(--frame-soft);
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        color: var(--dim);
+      }
+      .wp-doc-head .w { text-transform: uppercase; letter-spacing: 0.16em; }
+      .wp-doc-head .w--chaff { color: var(--violet); }
+      .wp-doc-head .w--emp { color: var(--blue); }
+      .wp-doc-head .w--snap { color: var(--amber); }
+      .wp-doc-head .n { margin-left: auto; color: var(--frame); }
+      .wp-doc pre {
+        margin: 0;
+        padding: 10px 12px;
+        font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+        color: var(--dim);
+        overflow-x: auto;
+      }
+      /* The shouted lines are the load-bearing ones — the doctrine is
+         written so a skim catches the verdict and misses nothing. */
+      .wp-doc pre b { color: var(--fg); font-weight: 500; }
+      .wp-doc pre i { color: var(--red); font-style: normal; }
+
+      /* ══ tables ═══════════════════════════════════════════════════ */
+      table.gd-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+      table.gd-tbl th, table.gd-tbl td {
+        text-align: left;
+        padding: 6px 10px 6px 0;
+        border-bottom: 1px solid var(--frame-soft);
+        vertical-align: top;
+      }
+      table.gd-tbl th {
+        color: var(--dim);
+        font-weight: 400;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      table.gd-tbl td code { color: var(--green); }
+      table.gd-tbl tr:last-child td { border-bottom: none; }
+      table.gd-tbl td.num { color: var(--amber); white-space: nowrap; }
+
+      code { font-family: var(--mono); color: var(--green); font-size: 0.94em; }
+
+      .gd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+      .gd-card { display: block; border: 1px solid var(--frame); padding: 11px 13px; color: var(--fg); }
+      .gd-card:hover { border-color: var(--green); color: var(--fg); }
+      .gd-card .t {
+        color: var(--green);
+        font-size: 12px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        display: block;
+        margin-bottom: 4px;
+      }
+      .gd-card .d { color: var(--dim); font-size: 12.5px; line-height: 1.5; }
+
+      /* ══ footer ═══════════════════════════════════════════════════ */
+      .gd-foot {
+        border-top: 1px solid var(--frame);
+        margin-top: 40px;
+        padding: 20px 24px 40px;
+        max-width: 1080px;
+        margin-left: auto;
+        margin-right: auto;
+        color: var(--dim);
+        font-size: 12.5px;
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+    </style>
+  </head>
+
+  <body>
+    <header class="gd-topbar">
+      <span class="prompt-sigil">$</span>
+      <span>sea_of_colours</span>
+      <span class="dim gd-hide-sm">&middot; teaching weapons &middot; v1.49</span>
+      <span class="prompt-caret">_</span>
+      <span class="gd-spacer"></span>
+      <a class="gd-manual-link" href="./index.html">[ INSTALL ]</a>
+      <a class="gd-manual-link gd-hide-sm" href="./leader.html">[ TEAM LEADER ]</a>
+      <a class="gd-manual-link gd-hide-sm" href="../manual/agent.html">[ AGENT GUIDE ]</a>
+    </header>
+    <div class="gd-progress" id="gd-progress"></div>
+
+    <nav class="gd-nav" id="gd-nav">
+      <a href="#why">[ 00 &middot; WHY NOTHING FIRES ]</a>
+      <a href="#chain">[ 01 &middot; THE CHAIN ]</a>
+      <a href="#stages">[ 02 &middot; THE ELEVEN STAGES ]</a>
+      <a href="#doctrine">[ 03 &middot; DOCTRINE ]</a>
+      <a href="#economy">[ 04 &middot; THE ECONOMY ]</a>
+      <a href="#ladder">[ 05 &middot; THE LADDER ]</a>
+      <a href="#traps">[ 06 &middot; SILENT TRAPS ]</a>
+      <a href="#map">[ 07 &middot; WHERE THE CODE IS ]</a>
+    </nav>
+
+    <section class="gd-hero">
+      <p class="gd-eyebrow">Hackathon &middot; the main exercise</p>
+      <h1>teaching<span class="sep">_</span>weapons</h1>
+      <p class="gd-sub"># find blue &rarr; buy a rack &rarr; know you hold it &rarr; aim it &rarr; fire it</p>
+
+      <p class="gd-lede">
+        The shipped agent, <strong>tabula_v12</strong>, has never fired a shot.
+        Not because it is badly written &mdash; because <strong>eleven separate
+        things</strong> have to be true before a single salvo leaves orbit, and
+        the stock fork is missing most of them. This guide walks all eleven, in
+        the order they have to be built, showing the real code that is there
+        today and the real code you write next to it.
+      </p>
+
+      <div class="gd-cta">
+        <a class="gd-btn gd-btn--primary" href="#chain">[ SEE THE CHAIN &darr; ]</a>
+        <a class="gd-btn" href="#stages">[ JUMP TO THE STAGES ]</a>
+        <a class="gd-btn" href="../manual/agent.html">[ HOW A TURN WORKS ]</a>
+      </div>
+    </section>
+
+    <main>
+      <!-- ══ 00 ═══════════════════════════════════════════════════ -->
+      <section class="gd-scene reveal" id="why">
+        <p class="gd-kicker">00 &middot; Why nothing fires</p>
+        <h2>An honest starting point</h2>
+        <p class="gd-lede">
+          Before the mechanism, the symptom &mdash; because the symptom is
+          misleading, and almost every team misdiagnoses it the same way.
+        </p>
+
+        <div class="gd-frame">
+          <div class="gd-frame-head">
+            <span class="gd-frame-title">What you will see on day one</span>
+            <span class="gd-frame-sub">and what it is not</span>
+          </div>
+          <p>
+            You run a season with a rack in the hold. Nothing fires. Twenty-seven
+            armed battles, zero salvos. The natural conclusion is
+            <em>the model is not clever enough to use weapons</em>.
+          </p>
+          <p>
+            It is nothing of the kind. The model is never asked. It is not told
+            it owns a weapon, it is not offered a play that uses one, and the
+            reply format it must answer in <strong>physically cannot express
+            one</strong> &mdash; the JSON schema restricts the verb to four
+            values, and <code>emp_launch</code> is not among them. The model
+            could be a genius and the night would look identical.
+          </p>
+        </div>
+
+        <div class="gd-note gd-note--warn">
+          <b class="tag">The rule that governs this whole guide</b>
+          <p>
+            <strong>Each link is invisible until the one before it works.</strong>
+            Write beautiful doctrine on day one and you will observe
+            <em>precisely nothing</em>, because the menu has no weapon play for
+            the doctrine to talk about. Build in order, test after each step, and
+            every step shows you something new.
+          </p>
+        </div>
+
+        <div class="gd-note gd-note--info">
+          <b class="tag">Two halves, and most teams only find one</b>
+          <p>
+            There is a <span class="fg-green">firing</span> half &mdash; schema,
+            menu, doctrine, packager &mdash; and a
+            <span class="fg-blue">money</span> half &mdash; finding blue, wanting
+            blue, spending blue. The built-in
+            <code>soc weapons</code> ladder only checks the firing half. A fork
+            can pass all four of its rungs and still never fire, because it
+            never bought anything to fire. Both halves are in this guide.
+          </p>
+        </div>
+      </section>
+
+      <!-- ══ 01 ═══════════════════════════════════════════════════ -->
+      <section class="gd-scene reveal" id="chain">
+        <p class="gd-kicker">01 &middot; The chain</p>
+        <h2>Eleven links, four acts</h2>
+        <p class="gd-lede">
+          Every box below has to be true. The status marks are
+          <strong>stock tabula_v12 as shipped</strong> &mdash; that is your
+          starting position. Click any link to open its stage.
+        </p>
+
+        <div class="wp-chain" id="wp-chain"></div>
+
+        <div class="gd-note">
+          <b class="tag">Reading the marks</b>
+          <p>
+            <span class="fg-red">MISSING</span> means the stock fork does not do
+            this at all. <span class="fg-amber">PARTIAL</span> means the
+            machinery exists but is gated so tightly it effectively never fires.
+            <span class="fg-green">DONE</span> means you inherit it working
+            &mdash; there are only two, and one of them has a trap in it.
+          </p>
+        </div>
+      </section>
+
+      <!-- ══ 02 ═══════════════════════════════════════════════════ -->
+      <section class="gd-scene reveal" id="stages">
+        <p class="gd-kicker">02 &middot; The eleven stages</p>
+        <h2>One tab at a time</h2>
+        <p class="gd-lede">
+          Each stage says the same things: <strong>what the agent needs to
+          understand</strong>, <strong>how you know it is missing</strong>,
+          <strong>what to change</strong> &mdash; then, side by side,
+          <strong>what is in the tree today</strong> and
+          <strong>what you write</strong>. Every snippet is real code.
+        </p>
+
+        <h3>First, who does what</h3>
+        <p class="gd-lede">
+          Worth getting straight before the stages, because the common mental
+          model &mdash; <em>&ldquo;the option is offered, the model picks it,
+          the engine runs it&rdquo;</em> &mdash; skips the step where most of
+          the work happens. Colours follow the
+          <a href="../manual/agent.html">agent guide</a>:
+          <span class="fg-green">green is our Python</span>,
+          <span class="fg-amber">amber is the model</span>,
+          <span class="fg-blue">blue is the engine</span>.
+        </p>
+
+        <div class="wp-pipe">
+          <div class="wp-pipe-step wp-pipe-step--py">
+            <span class="who">Python &middot; stage 7</span>
+            <span class="what">Build the geometry</span>
+            <span class="where">heuristic_chains, seam_control, probe_hints, your own aim resolver</span>
+          </div>
+          <div class="wp-pipe-step wp-pipe-step--py">
+            <span class="who">Python &middot; stages 8&ndash;9</span>
+            <span class="what">Wrap as an Option, and price it</span>
+            <span class="where">agency.build_registry() &rarr; format_menu_block()</span>
+          </div>
+          <div class="wp-pipe-step wp-pipe-step--ai">
+            <span class="who">Model</span>
+            <span class="what">Pick IDs. That is all it does</span>
+            <span class="where">"plan": ["SNAP1", "CH2"]</span>
+          </div>
+          <div class="wp-pipe-step wp-pipe-step--py">
+            <span class="who">Python &middot; stage 10</span>
+            <span class="what">Compile IDs back to wire moves</span>
+            <span class="where">resolve_plan &rarr; pack_recipe &rarr; sanitize_moves</span>
+          </div>
+          <div class="wp-pipe-step wp-pipe-step--en">
+            <span class="who">Engine</span>
+            <span class="what">Resolve the night</span>
+            <span class="where">21 hours, one move per hour, per seat</span>
+          </div>
+        </div>
+
+        <div class="gd-note gd-note--info">
+          <b class="tag">The consequence, and it is liberating</b>
+          <p>
+            The model <strong>never composes a coordinate</strong>. It chooses
+            from a list of pre-computed, pre-validated plays &mdash; the menu
+            header tells it so in as many words. So &ldquo;teach the agent to
+            aim&rdquo; is barely prompt engineering at all: it is writing the
+            Python that decides which cell is worth hitting, then giving the
+            model an honest reason to pick it.
+          </p>
+          <p>
+            Which also means a weapon play is <strong>three separate pieces of
+            work</strong>, not one. Geometry that finds the target (stage 7), a
+            menu entry that offers and prices it (stages 8&ndash;9), and a
+            packer that turns the chosen ID back into a launch on the right hour
+            (stage 10). Miss any one and the other two are invisible.
+          </p>
+        </div>
+
+        <h3>The stages</h3>
+
+        <div class="wp-tabs" id="wp-tabs"></div>
+        <div class="wp-panel">
+          <div class="wp-panel-head">
+            <span class="stage" id="wp-stage">Stage 1 of 11 &middot; the money</span>
+            <span class="badge" id="wp-badge">MISSING</span>
+            <h3 id="wp-title">&nbsp;</h3>
+          </div>
+          <div class="wp-panel-body">
+            <div class="wp-col wp-col--say">
+              <p class="wp-h wp-h--first">Say it in one sentence</p>
+              <p class="wp-say" id="wp-say"></p>
+              <p class="wp-h">What is actually going on</p>
+              <div id="wp-body"></div>
+              <p class="wp-h">How you know it is missing</p>
+              <div id="wp-symptom"></div>
+              <p class="wp-h">What to change</p>
+              <div id="wp-fix"></div>
+            </div>
+            <div class="wp-col">
+              <p class="wp-h wp-h--first">In the tree &mdash; what is there today</p>
+              <div id="wp-code"></div>
+              <p class="wp-h">What you write</p>
+              <div id="wp-write"></div>
+            </div>
+          </div>
+          <div class="wp-nav">
+            <button class="gd-ctl" id="wp-prev">[ &larr; PREV ]</button>
+            <button class="gd-ctl" id="wp-next">[ NEXT &rarr; ]</button>
+            <span class="gd-status" id="wp-status"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ 03 ═══════════════════════════════════════════════════ -->
+      <section class="gd-scene reveal" id="doctrine">
+        <p class="gd-kicker">03 &middot; Doctrine, in full</p>
+        <h2>Two kinds, and you need both</h2>
+        <p class="gd-lede">
+          Stage 5 says write doctrine; this is what it looks like. There are
+          <strong>two kinds</strong> and teams routinely write one and wonder
+          why nothing changed. All the text below is real, in the tree, and
+          reaching a model tonight.
+        </p>
+
+        <div class="wp-two">
+          <div class="gd-frame">
+            <div class="gd-frame-head">
+              <span class="gd-frame-title">1 &middot; Weapon doctrine</span>
+              <span class="gd-frame-sub">prose &rarr; the prompt</span>
+            </div>
+            <p>
+              Free text in <code>doctrine.py</code>, gated on holding the
+              weapon. It teaches <b>judgement</b>: what the thing does, when it
+              beats harvesting, at what hour, and &mdash; the part people skip
+              &mdash; when it is <em>wrong</em>.
+            </p>
+            <p class="dim" style="font-size:12.5px;margin:0">
+              Leave out &ldquo;when it is wrong&rdquo; and the model fires it
+              every night, including the rich ones where a weapon that banks
+              nothing is a straight loss.
+            </p>
+          </div>
+          <div class="gd-frame">
+            <div class="gd-frame-head">
+              <span class="gd-frame-title">2 &middot; Move doctrine</span>
+              <span class="gd-frame-sub">data &rarr; the menu</span>
+            </div>
+            <p>
+              A declared play in <code>weapon_plays.py</code>. It teaches
+              <b>a specific move</b>: this weapon, on this board condition, at
+              this hour, aimed by this resolver, borrowing that play's geometry
+              &mdash; plus a <code>why</code> that reaches the menu line.
+            </p>
+            <p class="dim" style="font-size:12.5px;margin:0">
+              Weapon doctrine without a declared play argues for a move the
+              menu cannot offer. A declared play without doctrine is a line the
+              model has no framework to judge.
+            </p>
+          </div>
+        </div>
+
+        <h3>Weapon doctrine &mdash; all three, verbatim</h3>
+        <p class="gd-lede">
+          Note the shared skeleton: a one-line verdict in caps, the mechanics,
+          the cost, then <b>WHEN IT IS WRONG</b>. Shouted lines are the
+          load-bearing ones, so a skim catches the verdict and misses nothing.
+        </p>
+
+        <div class="wp-doc">
+          <div class="wp-doc-head">
+            <span class="w w--snap">SNAP</span>
+            <span>100 blue &middot; one cell &middot; one hour</span>
+            <span class="n">the cheapest one to start with</span>
+          </div>
+          <pre><b>SNAP — THE CHEAPEST INTERDICTION IN THE GAME.
+SPEND A SNAP</b> on the single eye that lights their best target. 100 blue,
+one cell, one hour.
+It kills a probe on that cell and damages a harvester on it — including
+one that <b>ARRIVES</b> during the hour. That last half is what lets a SNAP
+<b>GUARD</b> a square rather than merely punish one.
+It resolves <b>ABOVE</b> the hour-start vision snapshot, so the landing it
+denies is refused <b>TONIGHT</b> rather than delayed. This is the one thing an
+EMP cannot do, and it is why SNAP answers a smash-and-grab.
+<i>WHEN IT IS WRONG:</i> if they can reach the target from a second eye, or
+land from another bearing, you have bought a beat and nothing more.
+Count their eyes before you fire.</pre>
+        </div>
+
+        <div class="wp-doc">
+          <div class="wp-doc-head">
+            <span class="w w--emp">EMP</span>
+            <span>200 blue &middot; 3 missiles &middot; 8 hours</span>
+            <span class="n">the one with friendly fire</span>
+          </div>
+          <pre><b>EMP — AREA DENIAL YOU CAN STAND IN.
+SPEND A CHARGE</b> early or not at all: the cloud runs 8 hours and wants the
+night ahead of it, so past hour 2 there is no night left to exploit.
+One launch fires up to 3 missiles as <b>ONE</b> move and <b>ONE</b> charge — each
+darkens a radius-2 diamond of 13 cells. Probes inside are destroyed;
+harvesters inside are disabled hour by hour. A rival cannot drop into
+cells it cannot see, so a landing under the cloud is <b>REFUSED</b>, not
+delayed.
+A cell is only darkened when a missile lands within its radius, and you
+choose where they land — so aim at least one cell further out than the
+blast reaches and the middle stays clear. That hole is a place only you
+can use for the cloud's whole life.
+<b>FRIENDLY FIRE IS ON.</b> Your own units in the cloud are not immune.
+<i>WHEN IT IS WRONG:</i> darkening ground you wanted to walk. If you have not
+planned a hole to stand in, you have denied yourself as well as them.</pre>
+        </div>
+
+        <div class="wp-doc">
+          <div class="wp-doc-head">
+            <span class="w w--chaff">CHAFF</span>
+            <span>300 blue &middot; no target &middot; 3 hours</span>
+            <span class="n">the one that costs no credits</span>
+          </div>
+          <pre><b>CHAFF — CANCEL THE MOVE, NOT THE PLACE.
+SPEND A CHAFF</b> when you hold one and an hour of theirs is worth more than
+two of yours.
+A chaff is not aimed at a cell. It is aimed at an <b>HOUR</b>: at the hour it
+resolves, every OTHER seat's action that hour is cancelled — their drop,
+their step, their pickup, their probe. The window runs 3 hours, so there
+is no re-try for them inside it.
+<b>THE COST IS SYMMETRIC.</b> You are immune only at the hour you launch,
+because that slot was spent launching. The next two hours cancel <b>YOUR</b>
+moves too. Plan the walk three hours after the flare, never one — a move
+ordered inside your own window is simply cancelled, and the night then
+reads as a failure that was really a mis-plan.
+<i>WHEN IT IS WRONG:</i> if you had a rich walk queued in those hours, you are
+paying 300 blue and two hours to deny one. Take the grab instead.</pre>
+        </div>
+
+        <h3>The correction pattern</h3>
+        <p class="gd-lede">
+          The subtle one. Your fork already ships a <code>BEWARE_</code> block
+          per weapon, written from the <em>defender's</em> side. Once the seat
+          is holding the thing, that block is actively misleading &mdash; so
+          rather than editing it, land a correction <strong>after</strong> it.
+          Recency favours whichever came last.
+        </p>
+        <div class="wp-doc">
+          <div class="wp-doc-head">
+            <span class="w w--chaff">CORRECTION</span>
+            <span>ordered after DOCTRINE_BEWARE_CHAFF</span>
+            <span class="n">fires only when the rack has one</span>
+          </div>
+          <pre><b>CORRECTION TO THE CHAFF BLOCK ABOVE — YOU ARE HOLDING ONE.</b>
+That block is about <b>SURVIVING</b> a rival's chaff, and it describes chaff as
+blind-fired at likely PICKUP hours. That is the defender's view and it
+does not describe the weapon in your rack.
+Fired deliberately, a chaff cancels a <b>SPECIFIC</b> hour you have read: any
+action, not only a pickup. An early flare is not wasted — a drop is an
+action, so an hour-1 chaff cancels an hour-1 <b>DROP</b>.</pre>
+        </div>
+
+        <div class="gd-note gd-note--warn">
+          <b class="tag">Do not pre-lose the argument</b>
+          <p>
+            One reference fork's EMP group header ended
+            <em>&ldquo;and never over a certain pure/mass grab&rdquo;</em>,
+            which reads as a rule rather than a trade. The model then refused
+            the weapon <b>three times out of three</b> with the option sitting
+            right there in the prompt.
+          </p>
+          <p>
+            State the trade honestly in the header and let the per-play
+            <code>why</code> argue the specific case. A header is not the place
+            to settle it.
+          </p>
+        </div>
+
+        <h3>Move doctrine &mdash; one declared play, annotated</h3>
+        <p class="gd-lede">
+          And here is the other kind. Five constraints and a sentence; the
+          sentence is what the model actually reads on the menu line.
+        </p>
+        <div class="wp-src">
+          <span class="path">&hellip;/harnesses/&lt;yours&gt;/weapon_plays.py</span>
+          <span class="sym">PLAYS</span>
+        </div>
+        <div class="gd-term">
+          <pre><span class="k">WeaponPlay</span>(
+    play_id=<span class="s">"BLIND_THE_FINDER"</span>,
+    weapon=<span class="s">"snap"</span>,
+    when=<span class="s">"redsign_theirs"</span>,      <span class="c"># only when a RIVAL lit a pure</span>
+    hour=<span class="s">"super_early"</span>,         <span class="c"># H1 — before their drop lands</span>
+    targets=<span class="s">"finder_probe"</span>,      <span class="c"># the resolver that finds the eye</span>
+    min_targets=<span class="w">1</span>,              <span class="c"># no eye found, no option offered</span>
+    combines_with=<span class="s">"blind_grab"</span>,  <span class="c"># borrows that play's geometry</span>
+    why=(
+        <span class="s">"when a rival has lit a pure we cannot see, the eye that "</span>
+        <span class="s">"found it is the only target we can name; snapping it at "</span>
+        <span class="s">"hour one refuses their drop for lack of live vision, then "</span>
+        <span class="s">"a paired blind-grab combs the smear they can no longer reach"</span>
+    ),
+)</pre>
+        </div>
+
+        <div class="gd-check">
+          <span class="mark">&#10003;</span>
+          <div>
+            Read the <code>why</code> again and notice what it is doing. It
+            does not describe the weapon &mdash; the weapon doctrine did that.
+            It describes <b>this move on this board</b>, names the follow-up
+            that banks the value, and tells the model the denial is only half
+            the play. That is the sentence that turns a zero-yield option into
+            a ranked one.
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ 04 ═══════════════════════════════════════════════════ -->
+      <section class="gd-scene reveal" id="economy">
+        <p class="gd-kicker">04 &middot; The economy</p>
+        <h2>What a shot costs</h2>
+        <p class="gd-lede">
+          You cannot teach an agent when to fire without teaching it what firing
+          costs. Every number here is read live out of
+          <code>game/weapons.py</code> and <code>game/session.py</code> &mdash;
+          never hard-code them in a fork, import them.
+        </p>
+
+        <div class="gd-frame">
+          <div class="gd-frame-head">
+            <span class="gd-frame-title">The three weapons</span>
+            <span class="gd-frame-sub">game/weapons.py &middot; &sect;4.9</span>
+          </div>
+          <table class="gd-tbl">
+            <tr>
+              <th>Weapon</th><th>Blue</th><th>Credits</th>
+              <th>Shape</th><th>Lasts</th><th>What it does</th>
+            </tr>
+            <tr>
+              <td class="fg-blue">EMP</td>
+              <td class="num">200</td><td class="num">250</td>
+              <td>3 missiles, Manhattan r2 (~13 cells each)</td>
+              <td class="num">8h</td>
+              <td>Probes destroyed, harvesters disabled. Friendly fire applies.</td>
+            </tr>
+            <tr>
+              <td class="fg-violet">CHAFF</td>
+              <td class="num">300</td><td class="num">0</td>
+              <td>No target &mdash; jams the hour globally</td>
+              <td class="num">3h</td>
+              <td>Cancels every other seat's action. The one that costs no credits.</td>
+            </tr>
+            <tr>
+              <td class="fg-amber">SNAP</td>
+              <td class="num">100</td><td class="num">250</td>
+              <td>One cell</td>
+              <td class="num">1h</td>
+              <td>Resolves <em>before</em> the vision snapshot &mdash; can deny a landing.</td>
+            </tr>
+          </table>
+        </div>
+
+        <div class="wp-two">
+          <div class="gd-frame">
+            <div class="gd-frame-head">
+              <span class="gd-frame-title">The cap is exactly one of each</span>
+              <span class="gd-frame-sub">WEAPONISED_BLUE_CAP = 600</span>
+            </div>
+            <div class="wp-capbar">
+              <div class="track">
+                <div class="seg seg--emp">EMP 200</div>
+                <div class="seg seg--chaff">CHAFF 300</div>
+                <div class="seg seg--snap">SNAP 100</div>
+              </div>
+              <div class="scale"><span>0 blue</span><span>600 blue</span></div>
+            </div>
+            <p>
+              The cap counts <b>blue-worth held at once</b>, not unit count. One
+              of each fills it to the brim, which is not a coincidence &mdash; it
+              is the design forcing a choice. Two EMPs and a chaff is 700 and
+              will be refused.
+            </p>
+          </div>
+
+          <div class="gd-frame">
+            <div class="gd-frame-head">
+              <span class="gd-frame-title">One EMP missile</span>
+              <span class="gd-frame-sub">Manhattan r2 &middot; 13 cells</span>
+            </div>
+            <div class="wp-diamond">    <b>. . <i>#</i> . .</b>
+    <b>. <i>#</i> <i>#</i> <i>#</i> .</b>
+    <b><i>#</i> <i>#</i> <u>X</u> <i>#</i> <i>#</i></b>
+    <b>. <i>#</i> <i>#</i> <i>#</i> .</b>
+    <b>. . <i>#</i> . .</b></div>
+            <p style="margin-top:10px">
+              <span class="fg-amber">X</span> is your aim point,
+              <span class="fg-red">#</span> the cloud. A launch fires
+              <b>three</b> of these, so one order can cover 39 cells &mdash; and
+              disables <em>your own</em> harvesters standing in them just as
+              happily.
+            </p>
+          </div>
+        </div>
+
+        <div class="gd-frame">
+          <div class="gd-frame-head">
+            <span class="gd-frame-title">The real trade nobody spots</span>
+            <span class="gd-frame-sub">credits, not blue</span>
+          </div>
+          <p>
+            Orbit pays <b>1000 credits</b> a turn. A probe costs
+            <b>250</b>. An EMP costs <b>250 credits</b> on top of its blue, and a
+            SNAP the same. So <strong>every unfired charge is a probe you did not
+            build</strong> &mdash; vision not opened, ground not found, on an
+            agent whose entire edge is knowing where the red is.
+          </p>
+          <p>
+            This is exactly why V12 stopped buying. Read the comment at the
+            switch; it is the clearest statement of the trade in the repo.
+          </p>
+          <div class="wp-src"><span class="path">sea_of_colours/orchestrator_2/harnesses/tabula_v12/orbit.py</span><span class="sym">:145</span></div>
+          <div class="gd-term"><pre><span class="py-cm"># v14 — V12 does not buy weapons. It never fired one: over nine</span>
+<span class="py-cm"># measured seasons the shipped agent bought EMPs and left every</span>
+<span class="py-cm"># charge in the rack at settlement, where a charge scores zero.</span>
+<span class="py-cm">#</span>
+<span class="py-cm"># The cost is not the BLUE, which is also worthless at settlement.</span>
+<span class="py-cm"># It is the CREDITS: game/weapons.py prices an EMP at 250 credits</span>
+<span class="py-cm"># and a SNAP at 250, and game/session.py prices a PROBE at 250. So</span>
+<span class="py-cm"># every unfired charge was a probe not built.</span>
+<span class="py-hl">actions, rationale = plan_orbit_actions(agent_view, weapons_enabled=<span class="py-kw">False</span>)</span></pre></div>
+          <div class="gd-note gd-note--stop">
+            <b class="tag">The trap this sets for you</b>
+            <p>
+              Turning buying back on <strong>without</strong> closing the firing
+              half makes your agent <em>worse</em> than stock, measurably. You
+              will spend credits on charges you never use and build fewer probes.
+              The two halves have to move together.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ 05 ═══════════════════════════════════════════════════ -->
+      <section class="gd-scene reveal" id="ladder">
+        <p class="gd-kicker">05 &middot; The ladder</p>
+        <h2>Ask the repo where you are</h2>
+        <p class="gd-lede">
+          There is a built-in checker. It reads your fork's source &mdash; no
+          model, no credentials, no game &mdash; and names the
+          <strong>single next thing to do</strong>. Run it constantly; it is the
+          fastest loop in the kit.
+        </p>
+
+        <div class="gd-term">
+          <button class="gd-copy" type="button">[ COPY ]</button>
+          <pre><span class="s">$</span> python scripts/soc.py weapons <span class="k">--agent</span> &lt;yours&gt;</pre>
+        </div>
+
+        <div class="wp-two">
+          <div>
+            <p class="wp-h wp-h--first">Stock <code>tabula_v12</code> &mdash; the day-one picture</p>
+            <div class="gd-term"><pre><span class="o">──────────────────────────────────────────────</span>
+<span class="o">  WEAPONS READINESS · tabula_v12</span>
+<span class="o">──────────────────────────────────────────────</span>
+
+  1. the agent knows it owns a rack      <span class="r">FAIL</span>
+       <span class="o">only the buying code reads weapon_stock —</span>
+       <span class="o">the night phase is never told what is</span>
+       <span class="o">in the rack</span>
+  2. the play is offerable and compilable <span class="r">FAIL</span>
+       <span class="o">the move schema has no weapon verb; no</span>
+       <span class="o">option in agency.py emits one; the</span>
+       <span class="o">packager/sanitizer would strip it</span>
+  3. the offer explains itself            <span class="r">FAIL</span>
+       <span class="o">no weapon option exists to check yet</span>
+  4. doctrine says when, and at what tempo <span class="r">FAIL</span>
+       <span class="o">doctrine covers surviving chaff, emp,</span>
+       <span class="o">snap, never using them</span>
+
+  <span class="w">START AT RUNG 1.</span></pre></div>
+          </div>
+          <div>
+            <p class="wp-h wp-h--first">A fork that got there</p>
+            <div class="gd-term"><pre><span class="o">──────────────────────────────────────────────</span>
+<span class="o">  WEAPONS READINESS · emp_harvest_test</span>
+<span class="o">──────────────────────────────────────────────</span>
+
+  1. the agent knows it owns a rack      <span class="s">PASS</span>
+       <span class="o">read in prompt.py, scorch.py,</span>
+       <span class="o">weapon_forge.py</span>
+  2. the play is offerable and compilable <span class="s">PASS</span>
+       <span class="o">schema, option menu and packager all</span>
+       <span class="o">know the verb</span>
+  3. the offer explains itself            <span class="s">PASS</span>
+       <span class="o">weapon options set detail and rationale</span>
+       <span class="o">in agency.py</span>
+  4. doctrine says when, and at what tempo <span class="s">PASS</span>
+       <span class="o">tells the seat to spend its own ordnance</span>
+
+  <span class="s">All four rungs are built.</span> Whether it fires
+  <span class="o">WELL is a different question — run the suite</span>
+  <span class="o">with a rack and compare.</span></pre></div>
+          </div>
+        </div>
+
+        <div class="gd-note gd-note--warn">
+          <b class="tag">What the ladder does not check</b>
+          <p>
+            It is a <strong>smoke test, not a proof</strong>, and it is
+            firing-only. It answers &ldquo;have you built this rung at all&rdquo;,
+            never &ldquo;is your implementation any good&rdquo;. A fork can go
+            green on all four and still fire into empty space. And nothing in it
+            covers stages <b>1&ndash;3</b> (blue and buying) or stage <b>11</b>
+            (feedback) from this guide.
+          </p>
+          <p>
+            For &ldquo;is it actually better&rdquo;, the only honest answer is a
+            comparison: <code>soc suite --agent &lt;yours&gt; --loadout empty,both</code>.
+            If armed and unarmed score the same, it is firing into space.
+          </p>
+        </div>
+      </section>
+
+      <!-- ══ 06 ═══════════════════════════════════════════════════ -->
+      <section class="gd-scene reveal" id="traps">
+        <p class="gd-kicker">06 &middot; Silent traps</p>
+        <h2>Four ways to lose an afternoon</h2>
+        <p class="gd-lede">
+          These all share a property that makes them expensive: they fail
+          <strong>quietly</strong>. Nothing throws, nothing logs, the agent just
+          behaves as though you never made the change.
+        </p>
+
+        <div class="gd-frame">
+          <div class="gd-frame-head">
+            <span class="gd-frame-title">1 &middot; The play whose condition never holds</span>
+            <span class="gd-frame-sub">offered never, reported never</span>
+          </div>
+          <p>
+            A weapon play declares <em>when</em> it applies. If that predicate
+            never matches a real board, the option is simply never built, and
+            <strong>nothing anywhere says so</strong>. A play called
+            <code>finder_probe</code> shipped dead for exactly this reason: it
+            was in the registry, it borrowed working geometry, and the target
+            mode it declared had never once run.
+          </p>
+          <div class="gd-note gd-note--ok">
+            <b class="tag">How to not have this</b>
+            <p>
+              Validate the declared axes against the allowed sets at build time
+              and raise. An unlisted value that falls through to a default is
+              how a dead play stays invisible for a week.
+            </p>
+          </div>
+        </div>
+
+        <div class="gd-frame">
+          <div class="gd-frame-head">
+            <span class="gd-frame-title">2 &middot; The wire verb and the frame tag</span>
+            <span class="gd-frame-sub">two strings that merely look alike</span>
+          </div>
+          <p>
+            What you <em>send</em> the engine and what the engine
+            <em>writes into the replay</em> are separate strings. Key your
+            last-night reader on the wrong one and every frame drops out. The
+            agent then journals that its move never executed &mdash; and carries
+            that false belief into tomorrow's reasoning.
+          </p>
+          <p>
+            This happened, and the way it presented is worth knowing: a seat
+            fired a SNAP that fried a rival probe, saw no SNAP in its own log,
+            and wrote &ldquo;the SNAP denial worked&rdquo; into its journal
+            anyway. <strong>Right by luck</strong> &mdash; and the guess is what
+            gets carried forward.
+          </p>
+        </div>
+
+        <div class="gd-frame">
+          <div class="gd-frame-head">
+            <span class="gd-frame-title">3 &middot; The denial play that prices at zero</span>
+            <span class="gd-frame-sub">correctly ranked last</span>
+          </div>
+          <p>
+            The menu ranks options by what they bank. A denial play &mdash; a
+            SNAP on a rival's eye, a chaff on their big hour &mdash; banks
+            <b>nothing</b>, so against a chain worth 600 it prices at zero and
+            the model sensibly ignores it. It is not being stupid; it is reading
+            the number you gave it.
+          </p>
+          <div class="gd-note gd-note--ok">
+            <b class="tag">The fix</b>
+            <p>
+              Price a denial by <strong>what the rival loses</strong>, not what
+              you gain, and say so in the menu line. &ldquo;Blinds the only eye
+              on their pure seam for 8h&rdquo; is a number the model can rank.
+            </p>
+          </div>
+        </div>
+
+        <div class="gd-frame">
+          <div class="gd-frame-head">
+            <span class="gd-frame-title">4 &middot; Loosening one blue gate</span>
+            <span class="gd-frame-sub">five levers, all pushing the same way</span>
+          </div>
+          <p>
+            Blue is held back by five independent mechanisms. Loosen one and
+            another still holds, so the observable behaviour does not move at
+            all &mdash; which reads exactly like &ldquo;my edit did
+            nothing&rdquo;. That is the interesting part of the problem, and it
+            is stage 2.
+          </p>
+        </div>
+      </section>
+
+      <!-- ══ 07 ═══════════════════════════════════════════════════ -->
+      <section class="gd-scene reveal" id="map">
+        <p class="gd-kicker">07 &middot; Where the code is</p>
+        <h2>The file map</h2>
+        <p class="gd-lede">
+          Everything you will touch lives in your own fork directory, except the
+          two engine files at the bottom &mdash; which you <strong>read and
+          import from, never edit</strong>.
+        </p>
+
+        <div class="gd-frame">
+          <div class="gd-frame-head">
+            <span class="gd-frame-title">Inside your fork</span>
+            <span class="gd-frame-sub">orchestrator_2/harnesses/&lt;yours&gt;/</span>
+          </div>
+          <table class="gd-tbl">
+            <tr><th>File</th><th>Stage</th><th>What you do to it</th></tr>
+            <tr><td><code>value_pyramid.py</code></td><td class="num">2</td><td>The blue purity floor and the red-chain guard</td></tr>
+            <tr><td><code>orbit.py</code></td><td class="num">3</td><td>Flip <code>weapons_enabled</code> back on</td></tr>
+            <tr><td><code>orbit_policy.py</code></td><td class="num">3</td><td>Retune <code>OrbitDials</code>; add a SNAP branch if you want one</td></tr>
+            <tr><td><code>world_view.py</code></td><td class="num">4</td><td>Carry your own rack into the night view</td></tr>
+            <tr><td><code>prompt.py</code></td><td class="num">2, 4</td><td>Say the rack out loud; <code>blue_is_requested()</code></td></tr>
+            <tr><td><code>doctrine.py</code></td><td class="num">2, 5</td><td>The offensive case, the corrections, blue-is-ammo</td></tr>
+            <tr><td><code>_v7/chat_schema.py</code></td><td class="num">6</td><td>Widen the verb enum. One line, do it first</td></tr>
+            <tr>
+              <td><code>weapon_forge.py</code><span class="dim"> (new)</span></td>
+              <td class="num">7</td>
+              <td>
+                The aim resolvers &mdash; <code>contested_pures()</code>,
+                <code>finder_probes()</code>, <code>rival_eyes()</code>. This is
+                the geometry, and the real work
+              </td>
+            </tr>
+            <tr>
+              <td><code>weapon_plays.py</code><span class="dim"> (new)</span></td>
+              <td class="num">8</td>
+              <td>Move doctrine &mdash; the declared plays and the economy policy</td>
+            </tr>
+            <tr><td><code>agency.py</code></td><td class="num">8, 9</td><td>Register the play; group header; detail and rationale</td></tr>
+            <tr><td><code>option_economics.py</code></td><td class="num">9</td><td>Price denial by what the rival loses</td></tr>
+            <tr><td><code>packager.py</code></td><td class="num">10</td><td>Add the <code>_DISPATCH</code> entry and the wire builder</td></tr>
+            <tr><td><code>_v7/move_sanitizer.py</code></td><td class="num">10</td><td>Let the new verb survive the pass</td></tr>
+            <tr><td><code>last_night.py</code></td><td class="num">11</td><td>Read your own fire back &mdash; mind the tag spelling</td></tr>
+          </table>
+        </div>
+
+        <div class="gd-frame">
+          <div class="gd-frame-head">
+            <span class="gd-frame-title">Engine &mdash; read only</span>
+            <span class="gd-frame-sub">never copy a literal out of these</span>
+          </div>
+          <table class="gd-tbl">
+            <tr><th>File</th><th>What it is</th></tr>
+            <tr>
+              <td><code>game/weapons.py</code></td>
+              <td>
+                The single home for every weapon's price and behaviour.
+                <code>BLUE_COST_BY_KIND</code>, <code>CREDIT_COST_BY_KIND</code>,
+                <code>SPEC_BY_KIND</code>, <code>WEAPONISED_BLUE_CAP</code>.
+                Import these &mdash; a hard-coded <code>200</code> in your fork
+                is a bug waiting for a retune.
+              </td>
+            </tr>
+            <tr>
+              <td><code>game/session.py</code></td>
+              <td>
+                Capacities and prices: <code>STARTING_BLUE_PURITY</code>,
+                <code>PROBE_BUILD_COST</code>, <code>HOARD_CAPACITY</code>, and
+                <code>blue_purity_available()</code> &mdash; the one true answer
+                to &ldquo;what can I afford?&rdquo;
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <div class="gd-frame">
+          <div class="gd-frame-head">
+            <span class="gd-frame-title">Two worked references</span>
+            <span class="gd-frame-sub">for when prose is not enough</span>
+          </div>
+          <ul>
+            <li>
+              <b>Legal wire moves:</b> <code>agent/heuristic_agent.py</code>
+              around lines 2050&ndash;2215. <code>RED_HARVEST</code> has weapons
+              on and fires both, so this is the canonical shape of an
+              <code>emp_launch</code> and a <code>chaff_flare</code>.
+            </li>
+            <li>
+              <b>A fork that finished the job:</b> any of the armed forks in
+              <code>harnesses/</code> that pass all four rungs. Their
+              <code>weapon_forge.py</code> factors a weapon play into four
+              declared axes, which is a tidier starting point than inventing the
+              structure yourself.
+            </li>
+          </ul>
+        </div>
+
+        <div class="gd-note gd-note--info">
+          <b class="tag">Working with a coding agent</b>
+          <p>
+            Point it at this page and at
+            <code>harnesses/tabula_v12/README.md</code>, then give it
+            <strong>one stage at a time</strong> and run
+            <code>soc weapons</code> between each. Handing it &ldquo;make my
+            agent use weapons&rdquo; produces a large diff touching all eleven
+            links at once, and when that does not fire you have no idea which
+            link is wrong. The ordering is the whole method.
+          </p>
+        </div>
+
+        <div class="gd-check">
+          <span class="mark">&#10003;</span>
+          <div>
+            <b>You are done with this guide when</b> <code>soc weapons</code> is
+            green on all four rungs, your agent buys a rack, and
+            <code>soc suite --loadout empty,both</code> shows the armed run
+            beating the unarmed one. Until that last comparison moves, you have
+            built a mechanism, not an advantage.
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="gd-foot">
+      <span>sea_of_colours &middot; teaching weapons</span>
+      <span class="dim">&sect;4.9 &middot; RULEBOOK v1.49</span>
+      <span class="gd-spacer" style="flex:1"></span>
+      <a href="./index.html">install guide</a>
+      <a href="./leader.html">team leader</a>
+      <a href="../manual/agent.html">agent &amp; harness</a>
+      <a href="../manual/index.html">player manual</a>
+    </footer>
+
+    <script>
+      (function () {
+        "use strict";
+
+        /* ── the eleven stages ───────────────────────────────────────
+           Order is the build order, which is also dependency order:
+           nothing here can be observed until everything above it works.
+           `act` drives the colour coding; `state` is stock tabula_v12.  */
+        const ACTS = {
+          money: { label: "Act 1 · The money", who: "can it afford a weapon at all?" },
+          know: { label: "Act 2 · The knowledge", who: "does it know what it holds, and when to use it?" },
+          move: {
+            label: "Act 3 · The move",
+            who: "build the geometry → offer it → price it → compile it",
+          },
+          back: { label: "Act 4 · The feedback", who: "does it learn what the shot did?" },
+        };
+
+        const STAGES = [
+          {
+            act: "money",
+            state: "yes",
+            short: "Blue exists",
+            title: "The agent needs to know about blue",
+            say: `Blue is the <span class="q">only</span> thing that buys a weapon,
+                  and it is the one resource that scores <span class="q">zero</span>
+                  if you keep it.`,
+            body: `<p>Three substances sit under the fog. <b class="fg-red">RED</b>
+                   scores. <b class="fg-green">GREEN</b> is a liability.
+                   <b class="fg-blue">BLUE</b> is worth nothing at settlement and
+                   exists for exactly one purpose: ordnance.</p>
+                   <p>Each house starts with a stipend of <b>250</b> &mdash; two
+                   SNAPs, or most of one EMP, and then never another drop unless
+                   a harvester goes and digs some. Blue is a terrain tile like
+                   the others: step on it, carry it, lift it to orbit.</p>
+                   <p>So the mental model to give the agent is inverted from red.
+                   A vault full of blue at the end of the season is not a good
+                   season. It is <em>unspent ammunition</em>.</p>`,
+            symptom: `<p>Nothing breaks here &mdash; this stage you inherit
+                      working. The engine harvests and banks blue correctly and
+                      the total is published to the agent every turn.</p>
+                      <p>The failure is conceptual and it shows up at
+                      settlement: a seat with 900 banked blue and an empty rack
+                      spent the season mining a currency it never used.</p>`,
+            fix: `<p>No code. Just know that
+                  <code>blue_purity_available()</code> sums <em>two</em> pools
+                  &mdash; the numeric bank and the BLUE parcels in the vault
+                  &mdash; so your buying logic in stage 3 must ask it rather
+                  than read <code>blue_bank</code> and undercount.</p>`,
+            code: [
+              {
+                path: "sea_of_colours/game/session.py",
+                sym: "STARTING_BLUE_PURITY",
+                lines: `<span class="py-kw">STARTING_BLUE_PURITY</span>: <span class="py-fn">int</span> = <span class="py-nu">250</span>
+<span class="py-st">"""Fissile stipend every house begins the season with."""</span>`,
+              },
+              {
+                path: "sea_of_colours/game/session.py",
+                sym: "blue_purity_available()",
+                lines: `<span class="py-kw">def</span> <span class="py-fn">blue_purity_available</span>(self, player):
+    <span class="py-cm"># The bank AND the vault parcels. Ask this, never guess.</span>
+    total = <span class="py-fn">int</span>(self.blue_bank.get(player, <span class="py-nu">0</span>))
+    <span class="py-kw">for</span> r <span class="py-kw">in</span> self.hoard_squares.get(player, []) <span class="py-kw">or</span> []:
+        <span class="py-kw">if</span> tile == Tile.BLUE:
+            total += self._parcel_purity(r)
+    <span class="py-kw">return</span> total`,
+              },
+            ],
+            write: [
+              {
+                path: "\u2026/harnesses/&lt;yours&gt;/ — affordability, done once",
+                sym: "import the price, never copy it",
+                lines: `<span class="py-kw">from</span> sea_of_colours.game.weapons <span class="py-kw">import</span> (
+    BLUE_COST_BY_KIND, CREDIT_COST_BY_KIND, WEAPONISED_BLUE_CAP,
+)
+
+<span class="py-kw">def</span> <span class="py-fn">can_afford</span>(kind, blue, credits, blue_held) -&gt; <span class="py-fn">bool</span>:
+    <span class="py-st">"""Three gates, and forks routinely forget the third."""</span>
+    <span class="py-kw">return</span> (
+        blue &gt;= BLUE_COST_BY_KIND[kind]
+        <span class="py-kw">and</span> credits &gt;= CREDIT_COST_BY_KIND[kind]
+        <span class="py-hl"><span class="py-kw">and</span> blue_held + BLUE_COST_BY_KIND[kind] &lt;= WEAPONISED_BLUE_CAP</span>
+    )`,
+              },
+            ],
+          },
+
+          {
+            act: "money",
+            state: "part",
+            short: "Blue is wanted",
+            title: "The agent needs a reason to go and get blue",
+            say: `Nothing in the shipped agent connects
+                  <span class="q">&ldquo;I want a weapon&rdquo;</span> to
+                  <span class="q">&ldquo;go harvest blue&rdquo;</span>. There is
+                  no loop. This is the most interesting gap in the kit.`,
+            body: `<p>V12 <em>will</em> grab blue, but only through a narrow
+                   gate, and <b>five separate levers</b> push the other way:</p>
+                   <ul>
+                     <li>a purity floor before blue is even offered
+                         (<code>_BLUE_GRAB_MIN = 192</code>)</li>
+                     <li>blue must not cost a harvester a strong red chain
+                         (<code>_STRONG_CHAIN_RED_MIN = 150</code>)</li>
+                     <li>blue is only &ldquo;requested&rdquo; when the vault is
+                         short <em>and</em> two or more harvesters are alive</li>
+                     <li>blue chain hints are suppressed unless requested</li>
+                     <li>doctrine says in so many words that red outranks
+                         blue</li>
+                   </ul>
+                   <p>Read <code>blue_is_requested()</code> closely. Its own
+                   docstring admits the limit: it does not outrank anything, it
+                   only puts an option on the menu.</p>`,
+            symptom: `<p>You loosen one lever and <b>the behaviour does not
+                      move at all</b>, because another still holds. This reads
+                      exactly like &ldquo;my edit did nothing&rdquo; and it is
+                      why teams give up on stage 2.</p>
+                      <p>Diagnostic: print the menu. If no <code>BL*</code>
+                      option is on it, the gate is upstream of wherever you
+                      edited.</p>`,
+            fix: `<p>The cleanest fix is doctrine, not dials: tell the model
+                  that while the rack is empty, blue <em>is</em> the reload, and
+                  let it weigh that against a red chain itself.</p>
+                  <p>Note the example opposite reverses once you hold a charge.
+                  Blue banks no second weapon that night, so red outranks it
+                  again &mdash; a permanent &ldquo;blue is great&rdquo; rule
+                  would cost you red all season.</p>`,
+            code: [
+              {
+                path: "\u2026/harnesses/tabula_v12/prompt.py",
+                sym: "blue_is_requested()",
+                lines: `<span class="py-kw">def</span> <span class="py-fn">blue_is_requested</span>(agent_view) -&gt; <span class="py-fn">bool</span>:
+    <span class="py-st">"""Should tonight's menu force-surface a blue grab?
+
+    Note what this does NOT do — it does not outrank
+    anything. It only puts a BL* on the menu; whether the
+    unit is better spent on red is the agent's call, and
+    doctrine says red wins ties.
+    """</span>
+    <span class="py-kw">if not</span> <span class="py-fn">blue_vault_is_short</span>(agent_view):
+        <span class="py-kw">return False</span>
+    <span class="py-kw">if not</span> (agent_view.get(<span class="py-st">"blue_tiles"</span>) <span class="py-kw">or</span> []):
+        <span class="py-kw">return False</span>
+    <span class="py-kw">return</span> <span class="py-fn">len</span>(<span class="py-fn">_orbit_harvester_ids</span>(agent_view)) &gt;= <span class="py-nu">2</span>`,
+              },
+              {
+                path: "\u2026/harnesses/tabula_v12/value_pyramid.py",
+                sym: ":63 — two of the five levers",
+                lines: `<span class="py-hl">_BLUE_GRAB_MIN = <span class="py-nu">192</span></span>        <span class="py-cm"># purity floor before blue is offered</span>
+<span class="py-hl">_STRONG_CHAIN_RED_MIN = <span class="py-nu">150</span></span> <span class="py-cm"># blue must not cost a strong red chain</span>`,
+              },
+            ],
+            write: [
+              {
+                path: "\u2026/harnesses/&lt;yours&gt;/doctrine.py",
+                sym: "DOCTRINE — blue is ammunition",
+                lines: `<span class="py-cm"># Lands AFTER the block that ranks blue below red, so</span>
+<span class="py-cm"># recency favours the correction.</span>
+_DOCTRINE_BLUE_IS_AMMO = <span class="py-st">"""\\
+CORRECTION — YOU SPEND BLUE, SO BLUE IS AMMUNITION.
+The block above ranks blue below red because most agents
+bank blue and never use it. You are not most agents: your
+ordnance is bought with blue, and it is how you take a
+rival's best night off them.
+So while your rack is EMPTY, a BL* is not a consolation
+prize for an idle harvester — it is the reload. Weigh it
+against a red chain on that basis rather than on tonight's
+points alone.
+Once you HOLD a charge this reverses: you have your round,
+blue banks no further weapon this night, and red outranks
+it again exactly as above.
+"""</span>`,
+              },
+            ],
+          },
+
+          {
+            act: "money",
+            state: "no",
+            short: "Blue is spent",
+            title: "The harness needs to actually buy a rack",
+            say: `Orbit is <span class="q">pure Python, not the model</span>.
+                  No amount of prompt engineering will make your agent buy
+                  anything.`,
+            body: `<p>This surprises nearly everyone. The night phase is
+                   LLM-driven; the <b>orbit phase is a heuristic</b>. It is
+                   ordinary code reading credits, blue and fleet size, and
+                   emitting a list of purchases. The model is never consulted.</p>
+                   <p>The dials sit in one frozen dataclass at the top of
+                   <code>orbit_policy.py</code> precisely so a fork can retune
+                   its own economy without touching anything shared.</p>
+                   <p>Note the shipped policy never buys SNAP at all, even
+                   though the engine supports it &mdash; and SNAP is the
+                   cheapest weapon at 100 blue, so it is the likeliest first one
+                   you want.</p>`,
+            symptom: `<p>Trivially visible: the rack is empty every night. Check
+                      the orbit card, or read <code>weapon_stock</code> in the
+                      view.</p>
+                      <p>The stock fork ships with the switch explicitly
+                      <b>off</b> &mdash; one argument in <code>orbit.py</code>.</p>`,
+            fix: `<p>Flip the switch, then set caps that respect the 600 cap as
+                  <em>one budget</em> rather than three independent numbers.</p>
+                  <p><b>But not before stage 10 works.</b> Buying without firing
+                  is strictly worse than stock, because every 250-credit charge
+                  is a probe you did not build.</p>`,
+            code: [
+              {
+                path: "\u2026/harnesses/tabula_v12/orbit.py",
+                sym: ":160 — the one-line switch",
+                lines: `<span class="py-hl">actions, rationale = <span class="py-fn">plan_orbit_actions</span>(
+    agent_view, weapons_enabled=<span class="py-kw">False</span>,   <span class="py-cm"># ← change me</span>
+)</span>`,
+              },
+              {
+                path: "\u2026/harnesses/tabula_v12/orbit_policy.py",
+                sym: "OrbitDials",
+                lines: `<span class="py-kw">@dataclass</span>(frozen=<span class="py-kw">True</span>)
+<span class="py-kw">class</span> <span class="py-fn">OrbitDials</span>:
+    probe_target_stock: <span class="py-fn">int</span> = <span class="py-nu">4</span>
+    blue_always_build: <span class="py-fn">int</span> = <span class="py-nu">300</span>   <span class="py-cm"># build freely above this</span>
+    blue_emp_roll: <span class="py-fn">int</span> = <span class="py-nu">250</span>       <span class="py-cm"># 50/50 roll in the band below</span>
+    emp_stockpile_cap: <span class="py-fn">int</span> = <span class="py-nu">2</span>
+    chaff_stockpile_cap: <span class="py-fn">int</span> = <span class="py-nu">1</span>`,
+              },
+            ],
+            write: [
+              {
+                path: "\u2026/harnesses/&lt;yours&gt;/weapon_plays.py",
+                sym: "an economy declared as one budget",
+                lines: `<span class="py-cm"># The three caps must be read as ONE budget: EMP is 200</span>
+<span class="py-cm"># blue, chaff 300, snap 100, and the cap is 600. One of</span>
+<span class="py-cm"># each is 600 exactly — there is no room for a second</span>
+<span class="py-cm"># charge of anything, so every cap here is 1. The stock</span>
+<span class="py-cm"># emp_stockpile_cap = 2 was 400 blue of intent against a</span>
+<span class="py-cm"># ceiling that could never pay for it.</span>
+ECONOMY = <span class="py-fn">EconomyPolicy</span>(
+    buy_asap=<span class="py-kw">True</span>,
+    <span class="py-hl">never_buy_what_you_cannot_fire=<span class="py-kw">True</span>,  <span class="py-cm"># the stage-10 guard</span></span>
+    hold_at={<span class="py-st">"emp"</span>: <span class="py-nu">1</span>, <span class="py-st">"chaff"</span>: <span class="py-nu">1</span>, <span class="py-st">"snap"</span>: <span class="py-nu">1</span>},
+    seek_blue_always=<span class="py-kw">True</span>,
+)`,
+              },
+            ],
+          },
+
+          {
+            act: "know",
+            state: "no",
+            short: "Knows its rack",
+            title: "The agent needs to be told what it is holding",
+            say: `An agent cannot choose a weapon
+                  <span class="q">it was never told it owns</span>. This is rung
+                  1, and it is about twenty lines.`,
+            body: `<p>Here is the asymmetry that defines the stock fork. The
+                   prompt describes, in detail: what the rivals are estimated to
+                   hold, what an EMP cloud does to you, how to shorten a chain
+                   when chaffed, how to insure a landing against a SNAP.</p>
+                   <p>It never once says <b>what is in your own rack</b>. The
+                   only module in the entire harness that reads
+                   <code>weapon_stock</code> is the buying code, which runs in
+                   orbit and cannot influence a night.</p>
+                   <p>So the agent is comprehensively briefed on what might be
+                   shot at it, and completely ignorant of what it can shoot back
+                   with.</p>`,
+            symptom: `<p><code>soc weapons</code> rung 1 fails with
+                      &ldquo;only the buying code reads
+                      <code>weapon_stock</code>&rdquo;.</p>
+                      <p>The checker deliberately refuses to count reads in
+                      <code>orbit.py</code>, <code>orbit_policy.py</code> and
+                      <code>card.py</code> &mdash; buying code reads the rack by
+                      construction, and printing it on a diagnostic is not the
+                      night phase knowing it.</p>`,
+            fix: `<p>Emit a rack block into the prompt. Say the count, the
+                  price and <em>what one charge does</em>, because the number
+                  alone is not actionable.</p>
+                  <p>Stay silent on an empty rack &mdash; a line reading
+                  &ldquo;chaff 0&rdquo; is noise on most nights and invites the
+                  model to reason about a weapon it cannot fire.</p>
+                  <p>Do this first. It is the cheapest change on the ladder and
+                  it shows up immediately on the turn card.</p>`,
+            code: [
+              {
+                path: "sea_of_colours/snowpark/view.py",
+                sym: "already published — you just have to read it",
+                lines: `<span class="py-cm"># The engine has been telling you all along:</span>
+<span class="py-ok">agent_view[<span class="py-st">"orbit"</span>][<span class="py-st">"weapon_stock"</span>]   <span class="py-cm"># {"emp": 1, "snap": 2}</span></span>
+agent_view[<span class="py-st">"orbit"</span>][<span class="py-st">"weapon_prices"</span>]
+agent_view[<span class="py-st">"orbit"</span>][<span class="py-st">"weapon_specs"</span>]`,
+              },
+              {
+                path: "sea_of_colours/evals/battles/readiness.py",
+                sym: "why card.py does not count",
+                lines: `<span class="py-cm"># Files whose weapon-awareness does NOT count for rung 1.</span>
+<span class="py-cm">#   * Buying code. It happens in orbit and reads the rack</span>
+<span class="py-cm">#     by construction — counting it would pass every fork</span>
+<span class="py-cm">#     on day zero.</span>
+<span class="py-cm">#   * Reporting code. Printing the rack on a diagnostic is</span>
+<span class="py-cm">#     not the night phase knowing it.</span>
+_BUYING_FILES = (<span class="py-st">"orbit.py"</span>, <span class="py-st">"orbit_policy.py"</span>, <span class="py-st">"card.py"</span>)`,
+              },
+            ],
+            write: [
+              {
+                path: "\u2026/harnesses/&lt;yours&gt;/prompt.py",
+                sym: "format_rack_block()",
+                lines: `<span class="py-kw">def</span> <span class="py-fn">format_rack_block</span>(agent_view) -&gt; <span class="py-fn">str</span>:
+    <span class="py-st">"""Silent on an empty rack — "chaff 0" is just noise."""</span>
+    lines = []
+    <span class="py-kw">for</span> w <span class="py-kw">in</span> (<span class="py-st">"chaff"</span>, <span class="py-st">"emp"</span>, <span class="py-st">"snap"</span>):
+        n = <span class="py-fn">_stock</span>(agent_view, w)
+        <span class="py-kw">if</span> n &lt;= <span class="py-nu">0</span>:
+            <span class="py-kw">continue</span>
+        lines.append(<span class="py-fn">_ONE_LINER</span>[w].format(n=n, cost=<span class="py-fn">_blue_cost</span>(w)))
+    <span class="py-kw">if not</span> lines:
+        <span class="py-kw">return</span> <span class="py-st">""</span>
+    <span class="py-kw">return</span> <span class="py-st">"\\n"</span>.join(
+        [<span class="py-st">"YOUR RACK (bought in orbit — spending it is a NIGHT move):"</span>]
+        + lines
+    )`,
+              },
+              {
+                path: "what the model then reads in its prompt",
+                sym: "the whole of rung 1",
+                lines: `<span class="py-ok">YOUR RACK (bought in orbit — spending it is a NIGHT move):</span>
+  SNAP x2 (100 blue each) — one cell, one hour. Kills the
+  eye on it and catches a harvester that ARRIVES that hour.
+  EMP x1 (200 blue each) — one charge fires 3 missiles as
+  ONE move; each darkens 13 cells for 8h. Probes inside
+  die, harvesters are disabled. FRIENDLY FIRE IS ON.`,
+              },
+            ],
+          },
+
+          {
+            act: "know",
+            state: "no",
+            short: "Doctrine",
+            title: "The agent needs to be told when firing beats harvesting",
+            say: `Every word of doctrine in the shipped fork is about
+                  <span class="q">surviving</span> a weapon. None is about
+                  <span class="q">using</span> one.`,
+            body: `<p>Doctrine is the judgement layer &mdash; the menu is a
+                   list, doctrine is the reason to reach for one item on it. The
+                   stock fork ships three solid blocks, all defensive:
+                   <code>DOCTRINE_BEWARE_EMP</code>,
+                   <code>DOCTRINE_BEWARE_CHAFF</code>,
+                   <code>DOCTRINE_BEWARE_SNAP</code>.</p>
+                   <p>Good offensive doctrine has four moving parts, and the
+                   fourth is the one people leave out:</p>
+                   <ul>
+                     <li><b>What it does</b> &mdash; mechanically, in the
+                         agent's own terms</li>
+                     <li><b>When to spend it</b> &mdash; the board condition</li>
+                     <li><b>At what hour</b> &mdash; a hard constraint, not
+                         decoration: an 8h EMP cloud wants the night ahead of
+                         it, so past hour 2 it has no night left to exploit</li>
+                     <li><b>When it is wrong</b> &mdash; without this the model
+                         fires it every night, and a weapon that banks nothing
+                         fired on a rich night is a straight loss</li>
+                   </ul>
+                   <p>Gate it on <em>your own rack</em>. Every BEWARE_ block
+                   fires on the threat side, which is why V12 says nothing about
+                   spending ordnance on a quiet board &mdash; precisely the
+                   cheapest night to fire.</p>`,
+            symptom: `<p>Rung 4 fails with &ldquo;doctrine covers surviving
+                      chaff, emp, snap, never using them&rdquo;. The checker
+                      looks for text telling the seat to <em>spend its own
+                      ordnance</em>, and ignores anything where the rival is the
+                      subject.</p>
+                      <p>The subtler symptom, once you have written some: the
+                      model reads a group header that says &ldquo;never over a
+                      certain grab&rdquo; and refuses the weapon every time. You
+                      pre-lost the argument in the header.</p>`,
+            fix: `<p>Write the offensive block, gated on holding the weapon,
+                  and add a <b>correction block</b> that lands after the
+                  defensive one it answers &mdash; recency favours whichever
+                  came last.</p>
+                  <p>Doctrine is rung 4 of 4 for a reason. Written before the
+                  menu carries a weapon play it refers to options that do not
+                  exist, and changes nothing you can observe.</p>
+                  <p>Three full examples are in
+                  <a href="#doctrine">&sect;03 below &darr;</a>.</p>`,
+            code: [
+              {
+                path: "\u2026/harnesses/tabula_v12/doctrine.py",
+                sym: "what ships — defensive only",
+                lines: `DOCTRINE_BEWARE_SNAP = <span class="py-st">"""\\
+OPPONENT WEAPONS — beware_snap (one square, taken off
+you first):
+  What it does to you:
+    * ONE missile at ONE cell, resolved there BEFORE the
+      hour's vision snapshot and before every drop, step
+      and pickup on it.
+    * A probe on that cell is DESTROYED BEFORE IT SEES.
+"""</span>`,
+              },
+              {
+                path: "\u2026/harnesses/&lt;armed fork&gt;/weapon_forge.py",
+                sym: "doctrine_for() — gate on your OWN rack",
+                lines: `<span class="py-kw">def</span> <span class="py-fn">doctrine_for</span>(agent_view) -&gt; <span class="py-fn">str</span>:
+    <span class="py-st">"""Doctrine for the weapons THIS SEAT is holding.
+
+    Note the gate polarity. Every BEWARE_ block fires on
+    the THREAT side, which is why V12 says nothing about
+    spending ordnance on a quiet board — precisely the
+    cheapest night to fire.
+    """</span>
+    held = [p.weapon <span class="py-kw">for</span> p <span class="py-kw">in</span> PLAYS <span class="py-kw">if</span> <span class="py-fn">_stock</span>(agent_view, p.weapon) &gt; <span class="py-nu">0</span>]
+    <span class="py-kw">return</span> <span class="py-st">"\\n\\n"</span>.join(
+        <span class="py-fn">_DOCTRINE</span>[w] <span class="py-kw">for</span> w <span class="py-kw">in</span> <span class="py-fn">dict</span>.fromkeys(held) <span class="py-kw">if</span> <span class="py-fn">_DOCTRINE</span>.get(w)
+    )`,
+              },
+            ],
+            write: [
+              {
+                path: "\u2026/harnesses/&lt;yours&gt;/doctrine.py",
+                sym: "SNAP — the shortest of the three",
+                lines: `<span class="py-st">"""\\
+SNAP — THE CHEAPEST INTERDICTION IN THE GAME.
+SPEND A SNAP on the single eye that lights their best
+target. 100 blue, one cell, one hour.
+It kills a probe on that cell and damages a harvester on
+it — including one that ARRIVES during the hour. That last
+half is what lets a SNAP GUARD a square rather than merely
+punish one.
+It resolves ABOVE the hour-start vision snapshot, so the
+landing it denies is refused TONIGHT rather than delayed.
+This is the one thing an EMP cannot do, and it is why SNAP
+answers a smash-and-grab.
+WHEN IT IS WRONG: if they can reach the target from a
+second eye, or land from another bearing, you have bought
+a beat and nothing more. Count their eyes before you fire.
+"""</span>`,
+              },
+            ],
+          },
+
+          {
+            act: "move",
+            state: "no",
+            short: "The vocabulary",
+            title: "The reply format needs to allow the word",
+            say: `The model is <span class="q">physically unable</span> to say
+                  &ldquo;fire&rdquo;. One line of JSON schema forbids it.`,
+            body: `<p>The model's answer is constrained to a schema. That schema
+                   pins the action verb to exactly four values, and no weapon
+                   verb is among them. Whatever the model thinks, it cannot
+                   express a launch.</p>
+                   <p>This is the single most important thing to understand on
+                   day one, because it reframes the whole problem. &ldquo;The
+                   model will not fire&rdquo; is never a model problem at the
+                   start &mdash; it is a <b>vocabulary</b> problem, and you own
+                   the vocabulary.</p>
+                   <p>The engine, meanwhile, accepts all three weapon verbs
+                   perfectly happily. Schema and engine disagree by design.</p>`,
+            symptom: `<p>Rung 2 fails with &ldquo;the move schema has no weapon
+                      verb&rdquo;.</p>
+                      <p>If you skip this and add a menu option anyway, the
+                      model may well select it &mdash; and then the reply fails
+                      validation, or the verb is silently dropped, and you spend
+                      an hour reading prompt text that was never the
+                      problem.</p>`,
+            fix: `<p>Widen the enum. One line, cheapest thing on the ladder to
+                  verify, and it must go first.</p>
+                  <p>Include <code>wait</code> while you are there &mdash; the
+                  packager needs it to pad a launch onto the hour it was
+                  designed for, which is stage 10.</p>`,
+            code: [
+              {
+                path: "\u2026/harnesses/tabula_v12/_v7/chat_schema.py",
+                sym: ":43 — the whole gate",
+                lines: `<span class="py-hl"><span class="py-st">"a"</span>: {<span class="py-st">"type"</span>: <span class="py-st">"string"</span>, <span class="py-st">"enum"</span>: [<span class="py-st">"drop"</span>, <span class="py-st">"step"</span>, <span class="py-st">"pickup"</span>, <span class="py-st">"probe"</span>]},</span>`,
+              },
+              {
+                path: "sea_of_colours/game/policy.py",
+                sym: "what the engine actually takes",
+                lines: `<span class="py-ok"><span class="py-st">"emp_launch"</span>, <span class="py-st">"chaff_flare"</span>, <span class="py-st">"snap_launch"</span>, <span class="py-st">"wait"</span></span>
+<span class="py-cm"># The engine has always accepted these. The harness</span>
+<span class="py-cm"># simply never offered the model the words.</span>`,
+              },
+            ],
+            write: [
+              {
+                path: "\u2026/harnesses/&lt;yours&gt;/_v7/chat_schema.py",
+                sym: "the widened enum",
+                lines: `<span class="py-ok"><span class="py-st">"a"</span>: {<span class="py-st">"type"</span>: <span class="py-st">"string"</span>, <span class="py-st">"enum"</span>: [
+    <span class="py-st">"drop"</span>, <span class="py-st">"step"</span>, <span class="py-st">"pickup"</span>, <span class="py-st">"probe"</span>, <span class="py-st">"wait"</span>,
+    <span class="py-st">"emp_launch"</span>, <span class="py-st">"chaff_flare"</span>, <span class="py-st">"snap_launch"</span>,
+]},</span>
+<span class="py-cm"># "at" already accepts a list of cells, which is the</span>
+<span class="py-cm"># shape emp_launch wants. chaff_flare carries no target.</span>`,
+              },
+            ],
+          },
+
+          {
+            act: "move",
+            state: "no",
+            short: "Build the geometry",
+            title: "Python must compute the aim points before the menu exists",
+            say: `The model never invents coordinates. Every option is
+                  <span class="q">pre-computed, pre-validated geometry</span>
+                  that heuristic Python built before the prompt was written.`,
+            body: `<p>This is the stage most descriptions of the pipeline skip,
+                   and it is where the real work lives. Long before any prompt
+                   is assembled, a set of <b>candidate generators</b> run over
+                   the board and produce concrete cells: chains, seam campaigns,
+                   probe placements, supersedes, frontier pushes.</p>
+                   <p>A weapon play needs the same treatment, and the question
+                   is always the same: <em>which cell, and why that one?</em>
+                   Two aim resolvers worth stealing:</p>
+                   <ul>
+                     <li><b>The contested pure</b> &mdash; a pure cell you can
+                         see that a rival eye also covers. The one cell whose
+                         occupation is <em>predictable</em>, because they will
+                         smash-and-grab it at hour one.</li>
+                     <li><b>The finder probe</b> &mdash; when a rival has lit a
+                         pure you cannot see, the single eye that found it is
+                         the only target you can name.</li>
+                   </ul>
+                   <p>Why a pure and nothing else: a SNAP guards one cell for
+                   one hour, so it only pays if you know where they will be. You
+                   cannot predict a step, a probe or a pickup. You <em>can</em>
+                   predict a pure. Aiming anywhere else is a guess.</p>`,
+            symptom: `<p>Silent and total: the option is never built, so it is
+                      never offered, and nothing logs a reason. A play with a
+                      resolver that returns zero targets simply does not
+                      appear.</p>
+                      <p>Worse, the resolver can be reading a view key that does
+                      not exist. Three target modes once resolved zero eyes on
+                      every board because the code read
+                      <code>enemy_probes</code> and the view publishes neither
+                      that nor <code>rival_probes</code>.</p>`,
+            fix: `<p>Write the resolver, and <b>log what it found even when it
+                  found nothing</b>. Return notes alongside targets so a dead
+                  resolver announces itself.</p>
+                  <p>Then assert on a real board in a test. A resolver that
+                  compiles is not a resolver that fires.</p>`,
+            code: [
+              {
+                path: "\u2026/harnesses/tabula_v12/harness.py",
+                sym: ":382 — candidate generation, before any prompt",
+                lines: `<span class="py-cm"># 4. Precompute the hint menu — all of this is geometry,</span>
+<span class="py-cm">#    and all of it runs before the model is called.</span>
+chain_hints = chain_filter.<span class="py-fn">dedupe_and_floor</span>(
+    heuristic_chains.<span class="py-fn">top_chain_hints</span>(agent_view, max_chains=<span class="py-nu">8</span>),
+)[:<span class="py-nu">5</span>]
+seam_patterns = seam_control.<span class="py-fn">build_seam_menu</span>(
+    agent_view, hot_drop_hints, seat_index=seat_index,
+)
+<span class="py-cm"># ...probe_hints, supersede, frontier, snap_cover, speculative</span>
+<span class="py-hl">option_registry = agency.<span class="py-fn">build_registry</span>(   <span class="py-cm"># ← consumes them</span></span>
+    agent_view=agent_view, seam_patterns=seam_patterns, ...
+)`,
+              },
+            ],
+            write: [
+              {
+                path: "\u2026/harnesses/&lt;yours&gt;/weapon_forge.py",
+                sym: "contested_pures() — an aim resolver",
+                lines: `<span class="py-kw">def</span> <span class="py-fn">contested_pures</span>(agent_view):
+    <span class="py-st">"""Pures WE can see that a rival eye ALSO covers.
+
+    A snap guards ONE cell for ONE hour, so it only pays if
+    you know where they are going to be. You cannot predict
+    a step, a probe or a pickup. You CAN predict a pure —
+    it is the one cell worth a smash-and-grab, so that is
+    where they land. Aiming anywhere else is a guess;
+    aiming at a contested pure is a read.
+
+    Returns ([(cell, n_rival_eyes), ...], notes), most
+    watched first: the more eyes, the surer the drop.
+    """</span>
+    notes = []
+    eyes = [<span class="py-fn">tuple</span>(r[<span class="py-st">"at"</span>]) <span class="py-kw">for</span> r <span class="py-kw">in</span> <span class="py-fn">rival_eyes</span>(agent_view)]
+    <span class="py-kw">if not</span> eyes:
+        <span class="py-hl">notes.append(<span class="py-st">"no rival eyes on the view"</span>)  <span class="py-cm"># say so!</span></span>
+        <span class="py-kw">return</span> [], notes
+    ...`,
+              },
+            ],
+          },
+
+          {
+            act: "move",
+            state: "no",
+            short: "Offer it",
+            title: "The play must reach the menu the model reads",
+            say: `The model picks from an enumerated list by ID. An absent
+                  option is <span class="q">an unthinkable move</span>.`,
+            body: `<p>With geometry in hand, the registry wraps each candidate
+                   in an <code>Option</code>: an ID, a menu label, the
+                   pre-filled geometry in <code>payload</code>, and the recipe
+                   text in <code>execute_lines</code>. Then
+                   <code>format_menu_block()</code> renders it into the prompt.</p>
+                   <p>The model's entire job at this point is to return a list
+                   of IDs. It never composes coordinates &mdash; the menu header
+                   tells it so explicitly.</p>
+                   <p>Declaring a play is where the four axes come in, and each
+                   is a real constraint rather than metadata: <b>when</b> (the
+                   board condition), <b>hour</b> (position in the move list
+                   <em>is</em> the hour), <b>combines-with</b> (whose geometry
+                   it borrows, so the option is not an orphan) and
+                   <b>targets</b> (which resolver from stage 7 supplies the aim
+                   points).</p>`,
+            symptom: `<p>Rung 2 fails with &ldquo;no option in agency.py emits
+                      one&rdquo;. The menu block in the prompt has no weapon
+                      section at all.</p>
+                      <p>Or the group header pre-loses the argument. One
+                      reference fork's EMP blurb ended &ldquo;and never over a
+                      certain pure/mass grab&rdquo;, and the model then refused
+                      the weapon three times out of three with the option right
+                      there in the prompt.</p>`,
+            fix: `<p>Register the play, give it a <code>kind</code> the
+                  packager will recognise in stage 10, and write a group header
+                  that states the trade <b>honestly</b> rather than settling
+                  it.</p>`,
+            code: [
+              {
+                path: "\u2026/harnesses/tabula_v12/agency.py",
+                sym: "Option — what a play fills in",
+                lines: `<span class="py-kw">@dataclass</span>
+<span class="py-kw">class</span> <span class="py-fn">Option</span>:
+    <span class="py-st">"""A single selectable option with pre-filled geometry."""</span>
+    option_id: <span class="py-fn">str</span>
+    kind: <span class="py-fn">str</span>       <span class="py-cm"># seam | hotdrop | probe | chain | …</span>
+    title: <span class="py-fn">str</span>      <span class="py-cm"># compact menu label</span>
+    detail: <span class="py-fn">str</span>     <span class="py-cm"># "when to pick me"</span>
+    execute_lines: List[<span class="py-fn">str</span>] = field(default_factory=<span class="py-fn">list</span>)
+    <span class="py-hl">payload: Dict[<span class="py-fn">str</span>, Any] = field(default_factory=<span class="py-fn">dict</span>)  <span class="py-cm"># geometry</span></span>
+    rationale: <span class="py-fn">str</span> = <span class="py-st">""</span>   <span class="py-cm"># WHY — see stage 9</span>`,
+              },
+              {
+                path: "\u2026/harnesses/tabula_v12/agency.py",
+                sym: "the menu header the model reads",
+                lines: `<span class="py-st">"OPTION MENU (SELECT by ID — put the IDs you choose, in "</span>
+<span class="py-st">"execution order, into \\"plan\\"; the geometry is pre-filled "</span>
+<span class="py-st">"for you). ... its geometry is PRE-VALIDATED — so you never "</span>
+<span class="py-st">"reconstruct any of it, and your picks are IDs from this "</span>
+<span class="py-st">"menu, never coordinates you compose."</span>`,
+              },
+            ],
+            write: [
+              {
+                path: "\u2026/harnesses/&lt;yours&gt;/weapon_plays.py",
+                sym: "MOVE DOCTRINE — one declared play",
+                lines: `<span class="py-fn">WeaponPlay</span>(
+    play_id=<span class="py-st">"PURE_TRAP"</span>,
+    weapon=<span class="py-st">"snap"</span>,
+    when=<span class="py-st">"always"</span>,          <span class="py-cm"># the resolver is the real gate</span>
+    hour=<span class="py-st">"super_early"</span>,     <span class="py-cm"># position in the list IS the hour</span>
+    targets=<span class="py-st">"contested_pure"</span>,   <span class="py-cm"># ← the stage-7 resolver</span>
+    min_targets=<span class="py-nu">1</span>,
+    combines_with=<span class="py-st">"smash_grab"</span>,  <span class="py-cm"># borrows that geometry</span>
+    why=(
+        <span class="py-st">"a pure we can see that a rival probe also watches "</span>
+        <span class="py-st">"is the one cell whose occupation is predictable — "</span>
+        <span class="py-st">"they will smash-and-grab it at hour one; snapping "</span>
+        <span class="py-st">"it refuses that landing and damages the hull, then "</span>
+        <span class="py-st">"a smash-grab lands on the cold pure at hour two and "</span>
+        <span class="py-st">"banks it — pick ONE grab on that cell, not two"</span>
+    ),
+)`,
+              },
+              {
+                path: "\u2026/harnesses/&lt;yours&gt;/ — the rendered menu line",
+                sym: "what the model actually sees",
+                lines: `<span class="py-ok">SNAP PLAYS (one cell, one hour — kills the eye on it, and</span>
+<span class="py-ok">catches a harvester that ARRIVES that hour)</span>
+  [SNAP1] PURE_TRAP — snap (14,22) at H1
+      denies ~430 to p2 · 2 rival eyes watch this pure
+      why: they will smash-and-grab it at hour one;
+           snapping it refuses that landing, then our
+           grab lands on the cold pure at hour two`,
+              },
+            ],
+          },
+
+          {
+            act: "move",
+            state: "no",
+            short: "Price it",
+            title: "A denial that banks nothing must still rank against a chain",
+            say: `The menu ranks by what an option banks. A denial banks
+                  <span class="q">zero</span>, so it prices at zero and is
+                  correctly ignored.`,
+            body: `<p>Two distinct failures wear the same face here, and
+                   together they eat more time than anything else on the
+                   ladder.</p>
+                   <p><b>The condition never matches.</b> Your play declares a
+                   trigger. If the board never satisfies it, the option is never
+                   built &mdash; silently.</p>
+                   <p><b>The price is wrong.</b> Next to a chain worth 600, a
+                   SNAP that banks nothing scores zero. The model is not being
+                   dim; it is reading the number you gave it. Price the denial
+                   by <em>what the rival loses</em> and the comparison becomes
+                   real.</p>
+                   <p>Two things carry that: the <b>yield annotation</b>, which
+                   is a number, and the <b>rationale</b>, which is the sentence
+                   arguing the trade. Bare geometry gives the model neither.</p>`,
+            symptom: `<p>Rung 3 fails with &ldquo;weapon options carry geometry
+                      but no detail/rationale&rdquo;. Or worse: rung 3 passes,
+                      the option appears every night, and the model never once
+                      picks it.</p>
+                      <p>Diagnostic for the dead trigger: log every option the
+                      registry <em>built</em>, not just the ones offered. A play
+                      absent from that log has a predicate that never fires.</p>`,
+            fix: `<p>Validate the declared axes at build time and
+                  <em>raise</em> on an unlisted value &mdash; a silent
+                  fall-through to a default is how a dead play hides for a
+                  week.</p>
+                  <p>Then annotate denial yield in the same units as everything
+                  else on the menu, so the model is comparing like with
+                  like.</p>`,
+            code: [
+              {
+                path: "\u2026/harnesses/tabula_v12/agency.py",
+                sym: "why bare geometry is not enough",
+                lines: `<span class="py-cm"># Fix 3.1 (OBS-34) — WHY this play exists and what it</span>
+<span class="py-cm"># trades. Seam patterns have carried this text since v10</span>
+<span class="py-cm"># and it has never once reached the agent: every named</span>
+<span class="py-cm"># play was being offered as bare geometry, so the</span>
+<span class="py-cm"># reasoning that distinguishes a tempo grab from a value</span>
+<span class="py-cm"># grab lived only in our heads.</span>
+<span class="py-ok">rationale: <span class="py-fn">str</span> = <span class="py-st">""</span></span>`,
+              },
+              {
+                path: "\u2026/harnesses/&lt;armed fork&gt;/weapon_forge.py",
+                sym: "the dead-play lesson, in a comment",
+                lines: `<span class="py-cm"># TARGETS — where the aim points come from. An unlisted</span>
+<span class="py-cm"># value used to fall through to the pattern path in</span>
+<span class="py-cm"># SILENCE, which is how finder_probe shipped dead: the</span>
+<span class="py-cm"># play was offered every night, borrowed seam geometry,</span>
+<span class="py-cm"># and nobody could see that the target mode it declared</span>
+<span class="py-cm"># had never run. Validated in problems() now.</span>`,
+              },
+            ],
+            write: [
+              {
+                path: "\u2026/harnesses/&lt;yours&gt;/option_economics.py",
+                sym: "price a denial by what the RIVAL loses",
+                lines: `<span class="py-kw">def</span> <span class="py-fn">denial_yield</span>(option, agent_view) -&gt; <span class="py-fn">int</span>:
+    <span class="py-st">"""What the rival does NOT bank because of this play.
+
+    A denial banks nothing, so scored on our own take it is
+    zero and ranks below every chain on the menu. Scored on
+    theirs it is comparable, which is the only way the model
+    can weigh it at all.
+    """</span>
+    cell = option.payload.get(<span class="py-st">"target"</span>)
+    <span class="py-kw">return</span> <span class="py-fn">int</span>(<span class="py-fn">expected_take_for_rival</span>(agent_view, cell))
+
+<span class="py-cm"># ...and say it in the menu line, in the same units as</span>
+<span class="py-cm"># every other option, or the number is not comparable:</span>
+<span class="py-ok">detail = <span class="py-st">f"denies ~{denial} to {rival} · {n_eyes} eyes watch it"</span></span>`,
+              },
+              {
+                path: "\u2026/harnesses/&lt;yours&gt;/weapon_forge.py",
+                sym: "make a dead axis impossible, not unlikely",
+                lines: `<span class="py-kw">def</span> <span class="py-fn">problems</span>(self) -&gt; List[<span class="py-fn">str</span>]:
+    bad = []
+    <span class="py-kw">if</span> self.targets <span class="py-kw">not in</span> TARGETS_CHOICES:
+        <span class="py-hl">bad.append(<span class="py-st">f"{self.play_id}: unknown targets {self.targets!r}"</span>)</span>
+    <span class="py-kw">if</span> self.when <span class="py-kw">not in</span> WHEN_CHOICES:
+        bad.append(<span class="py-st">f"{self.play_id}: unknown when {self.when!r}"</span>)
+    <span class="py-kw">return</span> bad
+<span class="py-cm"># Called at import. A typo is a crash on startup, not a</span>
+<span class="py-cm"># play that is quietly never offered.</span>`,
+              },
+            ],
+          },
+
+          {
+            act: "move",
+            state: "no",
+            short: "Execute it",
+            title: "The choice must compile into legal wire moves",
+            say: `Even a perfect selection dies here. There is
+                  <span class="q">no entry in the dispatch table</span>, so the
+                  option compiles to nothing at all.`,
+            body: `<p>The model returned IDs. <code>resolve_plan()</code> maps
+                   them back to <code>Option</code> objects, and
+                   <code>pack_recipe()</code> walks a dispatch table keyed on
+                   each option's <code>kind</code> to emit wire moves. No weapon
+                   entry means no moves.</p>
+                   <p>The packager is not a dumb expander. It densifies sparse
+                   paths into Manhattan steps, reorders for probe-support
+                   legality, and &mdash; the part that matters for weapons
+                   &mdash; can <b>pad with <code>wait</code></b> so a launch
+                   lands on the hour it was designed for. Position in the move
+                   list <em>is</em> the hour.</p>
+                   <p>The wire shape itself is simple: a verb, and for the aimed
+                   weapons a list of cells. Chaff takes no target, because it
+                   jams an hour rather than a place.</p>`,
+            symptom: `<p>Rung 2 fails with &ldquo;the packager/sanitizer would
+                      strip it&rdquo;.</p>
+                      <p>Live, the symptom is a night where the model's
+                      rationale talks confidently about a SNAP and the execution
+                      log shows four ordinary moves.</p>
+                      <p>One thing that will <em>not</em> save you: the
+                      sanitiser passes unknown verbs straight through on the
+                      grounds that the engine ignores anything invalid. So a
+                      malformed launch fails silently at the engine rather than
+                      loudly in your harness.</p>`,
+            fix: `<p>Add the dispatch entry and the packer. Copy the wire shape
+                  from <code>heuristic_agent.py</code>, which has weapons on and
+                  fires both.</p>
+                  <p>Refuse to fire late rather than firing at the wrong hour
+                  &mdash; a launch that slips past its designed beat hits an
+                  hour nobody was using, which is worse than not firing.</p>`,
+            code: [
+              {
+                path: "\u2026/harnesses/tabula_v12/packager.py",
+                sym: "_DISPATCH :851",
+                lines: `_DISPATCH = {
+    <span class="py-st">"seam"</span>: _pack_seam,       <span class="py-st">"hotdrop"</span>: _pack_hotdrop,
+    <span class="py-st">"grab"</span>: _pack_chain,      <span class="py-st">"blue_grab"</span>: _pack_chain,
+    <span class="py-st">"chain"</span>: _pack_chain,     <span class="py-st">"probe"</span>: _pack_probe,
+    <span class="py-st">"supersede"</span>: _pack_supersede, <span class="py-st">"frontier"</span>: _pack_frontier,
+<span class="py-hl"><span class="py-cm"># ← no weapon entry. This is the whole of stage 10.</span></span>
+}`,
+              },
+              {
+                path: "sea_of_colours/agent/heuristic_agent.py",
+                sym: ":2070 — what legal looks like",
+                lines: `<span class="py-ok">moves.append({<span class="py-st">"a"</span>: <span class="py-st">"emp_launch"</span>, <span class="py-st">"at"</span>: targets})</span>
+<span class="py-cm"># ...and chaff, which aims at nothing at all:</span>
+<span class="py-ok">moves.insert(idx, {<span class="py-st">"a"</span>: <span class="py-st">"chaff_flare"</span>})</span>`,
+              },
+            ],
+            write: [
+              {
+                path: "\u2026/harnesses/&lt;yours&gt;/packager.py",
+                sym: "_pack_weapon() — hour is position",
+                lines: `<span class="py-kw">def</span> <span class="py-fn">_pack_weapon</span>(pk, payload) -&gt; <span class="py-kw">None</span>:
+    <span class="py-st">"""Position in pk.moves IS the hour."""</span>
+    <span class="py-kw">if</span> <span class="py-fn">int</span>(payload.get(<span class="py-st">"stock"</span>) <span class="py-kw">or</span> <span class="py-nu">0</span>) &lt;= <span class="py-nu">0</span>:
+        pk.log.append(<span class="py-st">"cut: none of that weapon in the rack"</span>)
+        <span class="py-kw">return</span>
+    verb = _WIRE_VERB[payload[<span class="py-st">"weapon"</span>]]
+    want = <span class="py-fn">int</span>(payload.get(<span class="py-st">"at_hour"</span>) <span class="py-kw">or</span> <span class="py-nu">1</span>)
+    <span class="py-hl"><span class="py-kw">if</span> <span class="py-fn">len</span>(pk.moves) + <span class="py-nu">1</span> &gt; want:          <span class="py-cm"># refuse, don't slip</span></span>
+        pk.log.append(<span class="py-st">f"cut: wanted H{want}, firing late hits "</span>
+                      <span class="py-st">"an hour nobody was using"</span>)
+        <span class="py-kw">return</span>
+    <span class="py-kw">while</span> <span class="py-fn">len</span>(pk.moves) + <span class="py-nu">1</span> &lt; want:      <span class="py-cm"># pad onto the beat</span>
+        pk.moves.append({<span class="py-st">"a"</span>: <span class="py-st">"wait"</span>})
+    <span class="py-kw">if</span> payload.get(<span class="py-st">"aims_at_cells"</span>):
+        pk.moves.append({<span class="py-st">"a"</span>: verb, <span class="py-st">"at"</span>: payload[<span class="py-st">"target"</span>]})
+    <span class="py-kw">else</span>:
+        pk.moves.append({<span class="py-st">"a"</span>: verb})   <span class="py-cm"># chaff aims at nothing</span>`,
+              },
+              {
+                path: "\u2026/harnesses/&lt;yours&gt;/packager.py",
+                sym: "register it — one line",
+                lines: `<span class="py-ok">_DISPATCH.update(weapon_forge.<span class="py-fn">packers</span>())</span>
+<span class="py-cm"># packers() returns {kind: _pack_weapon} for every play</span>
+<span class="py-cm"># declared. Careful: a dict update SILENTLY replaces an</span>
+<span class="py-cm"># existing packer, so declaring a generic EMP play can</span>
+<span class="py-cm"># overwrite a hand-written one that was doing more.</span>`,
+              },
+            ],
+          },
+
+          {
+            act: "back",
+            state: "yes",
+            short: "Feedback",
+            title: "The agent needs to read back what the shot did",
+            say: `Already wired &mdash; with a
+                  <span class="q">trap</span> in it that has bitten before and
+                  corrupts the <em>next</em> night's reasoning.`,
+            body: `<p>Good news: the last-night recap already knows all three
+                   weapon tags, and the digest already carries EMP scars and
+                   incoming attacks. When your fork starts firing, the feedback
+                   path lights up on its own.</p>
+                   <p>The trap is that <b>the wire verb and the replay frame tag
+                   are separate strings</b> that merely happen to match. Key your
+                   reader on the wrong spelling and every frame drops out.</p>
+                   <p>That failure is quiet and it compounds, because the agent
+                   writes its own journal. It concludes the move never executed,
+                   and carries that false belief into tomorrow.</p>`,
+            symptom: `<p>You fire, the board plainly changes, and the agent's own
+                      execution log has a hole where the hour should be.</p>
+                      <p>Observed live, and worth quoting because of how it
+                      presented: a seat fired a SNAP that fried a probe, saw no
+                      SNAP in its log, and wrote &ldquo;the SNAP denial
+                      worked&rdquo; into its journal anyway. <b>Right by
+                      luck</b>, and the guess is what gets carried forward.</p>`,
+            fix: `<p>Nothing, if you use the shipped tags. If you add a weapon,
+                  pin the equality in a test rather than trusting a comment
+                  &mdash; the comment was wrong for a year.</p>`,
+            code: [
+              {
+                path: "\u2026/harnesses/tabula_v12/last_night.py",
+                sym: "_OWN_ACTION_TAGS — already correct",
+                lines: `_OWN_ACTION_TAGS = {
+    <span class="py-st">"drop"</span>, <span class="py-st">"step"</span>, <span class="py-st">"pickup"</span>, <span class="py-st">"probe"</span>,
+    <span class="py-ok"><span class="py-st">"emp_launch"</span>, <span class="py-st">"chaff_flare"</span>, <span class="py-st">"snap_launch"</span>,</span>
+    <span class="py-cm"># failure outcomes on your OWN units — learning signal</span>
+    <span class="py-st">"waste"</span>, <span class="py-st">"empd"</span>, <span class="py-st">"damaged"</span>, <span class="py-st">"chaffed"</span>,
+}`,
+              },
+              {
+                path: "\u2026/harnesses/tabula_v12/last_night.py",
+                sym: "the bug this replaced",
+                lines: `<span class="py-cm"># v1.48: this said "snap" and carried a comment asserting</span>
+<span class="py-cm"># the frame tag differed from the verb. It does not, and</span>
+<span class="py-cm"># the wrong token dropped every SNAP a seat ever fired out</span>
+<span class="py-cm"># of its own EXECUTION LOG. The hour simply went missing,</span>
+<span class="py-cm"># so a seat that fired one had no evidence it had.</span>`,
+              },
+            ],
+            write: [
+              {
+                path: "\u2026/harnesses/&lt;yours&gt;/tests/test_fork.py",
+                sym: "pin it, do not comment it",
+                lines: `<span class="py-kw">def</span> <span class="py-fn">test_every_wire_verb_is_a_tag_we_read</span>():
+    <span class="py-st">"""The verb we send and the frame tag we read are two
+    separate strings that merely look alike. A comment
+    claimed they differed for a year; assert instead.
+    """</span>
+    <span class="py-kw">for</span> verb <span class="py-kw">in</span> _WIRE_VERB.values():
+        <span class="py-hl"><span class="py-kw">assert</span> verb <span class="py-kw">in</span> last_night._OWN_ACTION_TAGS, verb</span>`,
+              },
+            ],
+          },
+        ];
+
+        const STATE_LABEL = { no: "MISSING", part: "PARTIAL", yes: "DONE" };
+
+        /* ── chain visual ────────────────────────────────────────── */
+        (function chain() {
+          const host = document.getElementById("wp-chain");
+          if (!host) return;
+          const order = ["money", "know", "move", "back"];
+          order.forEach((actKey) => {
+            const act = ACTS[actKey];
+            const wrap = document.createElement("div");
+            wrap.className = `wp-act wp-act--${actKey}`;
+            const head = document.createElement("div");
+            head.className = "wp-act-head";
+            head.innerHTML =
+              `<span>${act.label}</span><span class="who">${act.who}</span>`;
+            wrap.appendChild(head);
+            const links = document.createElement("div");
+            links.className = "wp-links";
+            STAGES.forEach((s, i) => {
+              if (s.act !== actKey) return;
+              const b = document.createElement("button");
+              b.className = "wp-link";
+              b.type = "button";
+              b.innerHTML =
+                `<span class="n">${String(i + 1).padStart(2, "0")}</span>` +
+                `<span class="tx">${s.short}</span>` +
+                `<span class="st ${s.state}">${STATE_LABEL[s.state]}</span>`;
+              b.addEventListener("click", () => {
+                go(i);
+                document
+                  .getElementById("stages")
+                  .scrollIntoView({ behavior: "smooth", block: "start" });
+              });
+              links.appendChild(b);
+            });
+            wrap.appendChild(links);
+            host.appendChild(wrap);
+          });
+        })();
+
+        /* ── tab player ──────────────────────────────────────────── */
+        const tabs = document.getElementById("wp-tabs");
+        const elStage = document.getElementById("wp-stage");
+        const elBadge = document.getElementById("wp-badge");
+        const elTitle = document.getElementById("wp-title");
+        const elSay = document.getElementById("wp-say");
+        const elBody = document.getElementById("wp-body");
+        const elSymptom = document.getElementById("wp-symptom");
+        const elFix = document.getElementById("wp-fix");
+        const elCode = document.getElementById("wp-code");
+        const elWrite = document.getElementById("wp-write");
+        const elStatus = document.getElementById("wp-status");
+
+        const renderCode = (blocks) =>
+          (blocks || [])
+            .map(
+              (c) =>
+                `<div class="wp-src"><span class="path">${c.path}</span>` +
+                `<span class="sym">${c.sym}</span></div>` +
+                `<div class="gd-term"><pre>${c.lines}</pre></div>`,
+            )
+            .join("");
+
+        let idx = 0;
+
+        STAGES.forEach((s, i) => {
+          const b = document.createElement("button");
+          b.className = "wp-tab";
+          b.type = "button";
+          b.dataset.act = s.act;
+          b.innerHTML = `<span class="n">${String(i + 1).padStart(2, "0")}</span>${s.short}`;
+          b.addEventListener("click", () => go(i));
+          tabs.appendChild(b);
+        });
+        const tabEls = Array.from(tabs.children);
+
+        function go(i) {
+          idx = (i + STAGES.length) % STAGES.length;
+          const s = STAGES[idx];
+          tabEls.forEach((t, n) => t.classList.toggle("is-on", n === idx));
+          elStage.textContent =
+            `Stage ${idx + 1} of ${STAGES.length} · ${ACTS[s.act].label.replace(/^Act \d+ · /, "").toLowerCase()}`;
+          elBadge.textContent = STATE_LABEL[s.state];
+          elBadge.className = `badge wp-badge--${s.state}`;
+          elTitle.textContent = s.title;
+          elSay.innerHTML = s.say;
+          elBody.innerHTML = s.body;
+          elSymptom.innerHTML = s.symptom;
+          elFix.innerHTML = s.fix;
+          elCode.innerHTML = renderCode(s.code);
+          elWrite.innerHTML = renderCode(s.write);
+          elStatus.textContent = `# ${s.short.toLowerCase()}`;
+          // Keep the URL shareable — a team leader can link one stage.
+          if (history.replaceState) {
+            history.replaceState(null, "", `#stage=${idx + 1}`);
+          }
+        }
+
+        document.getElementById("wp-prev").addEventListener("click", () => go(idx - 1));
+        document.getElementById("wp-next").addEventListener("click", () => go(idx + 1));
+        document.addEventListener("keydown", (e) => {
+          if (e.target.closest("input, textarea")) return;
+          if (e.key === "ArrowLeft") go(idx - 1);
+          if (e.key === "ArrowRight") go(idx + 1);
+        });
+
+        const fromHash = /#stage=(\d+)/.exec(location.hash);
+        go(fromHash ? Number(fromHash[1]) - 1 : 0);
+
+        /* ── chrome: progress, nav highlight, reveal, copy ───────── */
+        const progress = document.getElementById("gd-progress");
+        const navLinks = Array.from(document.querySelectorAll("#gd-nav a"));
+        const sections = navLinks
+          .map((a) => document.querySelector(a.getAttribute("href")))
+          .filter(Boolean);
+
+        function onScroll() {
+          const h = document.documentElement;
+          const max = h.scrollHeight - h.clientHeight;
+          progress.style.width = max > 0 ? `${(h.scrollTop / max) * 100}%` : "0";
+          let active = 0;
+          sections.forEach((sec, i) => {
+            if (sec.getBoundingClientRect().top <= 140) active = i;
+          });
+          navLinks.forEach((a, i) => a.classList.toggle("is-active", i === active));
+        }
+        window.addEventListener("scroll", onScroll, { passive: true });
+        onScroll();
+
+        if ("IntersectionObserver" in window) {
+          const io = new IntersectionObserver(
+            (entries) => {
+              entries.forEach((en) => {
+                if (en.isIntersecting) {
+                  en.target.classList.add("is-in");
+                  io.unobserve(en.target);
+                }
+              });
+            },
+            { rootMargin: "0px 0px -8% 0px" },
+          );
+          document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+        } else {
+          document.querySelectorAll(".reveal").forEach((el) => el.classList.add("is-in"));
+        }
+
+        document.querySelectorAll(".gd-copy").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const pre = btn.parentElement.querySelector("pre");
+            if (!pre || !navigator.clipboard) return;
+            navigator.clipboard.writeText(pre.textContent.replace(/^\$ /gm, ""));
+            const was = btn.textContent;
+            btn.textContent = "[ COPIED ]";
+            setTimeout(() => (btn.textContent = was), 1200);
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>

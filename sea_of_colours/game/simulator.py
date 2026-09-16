@@ -32,6 +32,7 @@ from typing import (
     List,
     Mapping,
     Optional,
+    Set,
     Tuple,
     TYPE_CHECKING,
 )
@@ -246,15 +247,22 @@ class NightSimulator:
             triggerers = chaff_triggerers_by_hour.get(current_hour, set())
             all_chaff_immune = chaff_this_hour and set(seats) <= triggerers
             if not chaff_this_hour or all_chaff_immune:
+                # v1.48 — both pre-passes run before either can send us
+                # round again, and each reports the seats it spent so the
+                # next one does not act for them twice. A swap used to
+                # ``continue`` on the spot, which pushed any contested
+                # drop on the SAME hour into the next one; contention is
+                # contention, and all of it belongs to this hour.
+                spent_now: Set[str] = set(preempted_now)
+
                 handled_swap = self._maybe_resolve_swap_collision(
                     sess, queue_for, pointers, applied, replay,
                     hour=current_hour,
                     seats=seats,
-                    skip_seats=preempted_now,
+                    skip_seats=spent_now,
                 )
-                if handled_swap:
-                    continue
-                
+                spent_now |= handled_swap
+
                 # v0.9.10 — simultaneous drop collision check. If multiple
                 # harvesters try to drop on the same square this hour, none
                 # land, all become damaged and stay in orbit.
@@ -262,9 +270,40 @@ class NightSimulator:
                     sess, queue_for, pointers, applied, replay,
                     hour=current_hour,
                     seats=seats,
-                    skip_seats=preempted_now,
+                    skip_seats=spent_now,
                 )
-                if handled_simul_drop:
+                spent_now |= handled_simul_drop
+
+                # v1.49 — the egress snapshot is taken HERE, ahead of the
+                # converge pre-pass, because that pass has to know whether
+                # the harvester standing on a contested cell is leaving.
+                # Recomputed below for the dispatch proper, since a
+                # converge collision changes who is still standing.
+                vacating = self._departing_harvesters(
+                    sess, seats, queue_for, pointers, applied,
+                    preempted=preempted_now,
+                    chaff_active_until=chaff_active_until,
+                    chaff_triggerers=triggerers,
+                    current_hour=current_hour,
+                    disabled_units=disabled_units_this_hour,
+                    spent_seats=spent_now,
+                )
+
+                # v1.49 (§3.17.6) — two harvesters stepping into one empty
+                # cell. The plainest reading of §3.17's opening sentence,
+                # but not one of its four illustrated patterns, so it used
+                # to fall through to the seat loop and let whoever was
+                # walked first take the cell.
+                handled_converge = self._maybe_resolve_converging_steps(
+                    sess, queue_for, pointers, applied, replay,
+                    hour=current_hour,
+                    seats=seats,
+                    skip_seats=spent_now,
+                    disabled_units=disabled_units_this_hour,
+                    departing_units=vacating,
+                )
+
+                if handled_swap or handled_simul_drop or handled_converge:
                     continue
 
             # v0.9.17 — hour-start visibility snapshot for live-only drops,
@@ -284,13 +323,15 @@ class NightSimulator:
 
             # v1.48 — hour-start EGRESS snapshot, the occupancy sibling of
             # the visibility snapshot above and for the same reason
-            # (parallel resolution, §3.10). A harvester lifting off this
-            # hour is departing, not arriving, so §3.17 does not collide a
-            # lander with it. Taken before any seat acts so the outcome
-            # stops depending on which seat the loop reaches first.
+            # (parallel resolution, §3.10). A harvester lifting off — or,
+            # since v1.49, stepping off — this hour is departing, not
+            # arriving, so §3.17 does not collide a lander with it. Taken
+            # before any seat acts so the outcome stops depending on which
+            # seat the loop reaches first.
             sess._departing_units_this_hour = self._departing_harvesters(  # type: ignore[attr-defined]
                 sess, seats, queue_for, pointers, applied,
                 preempted=getattr(sess, "_preempted_seats_this_hour", set()),
+                disabled_units=disabled_units_this_hour,
                 chaff_active_until=chaff_active_until,
                 chaff_triggerers=chaff_triggerers_by_hour.get(
                     current_hour, set(),
@@ -358,6 +399,15 @@ class NightSimulator:
                 )
                 if applied_this_pass:
                     applied[p] += 1
+
+            # v1.49 (§3.11.1) — last thing in the hour, once every seat
+            # has had its say: a probe that ended up under a harvester is
+            # crushed no matter which of the two got there first. See
+            # :meth:`_crush_probes_under_harvesters` for why the mover's
+            # own crush is left exactly as it was.
+            self._crush_probes_under_harvesters(
+                sess, replay, hour=current_hour,
+            )
 
         # v0.9.13 — normalise per-seat hour stamps to the TRUE
         # hours-consumed for each seat. During resolution the planetary
@@ -1328,8 +1378,10 @@ class NightSimulator:
         chaff_active_until: int,
         chaff_triggerers: AbstractSet[str],
         current_hour: int,
+        disabled_units: Optional[AbstractSet[str]] = None,
+        spent_seats: Optional[AbstractSet[str]] = None,
     ) -> Set[str]:
-        """Harvesters that will leave the surface during ``current_hour``.
+        """Harvesters that will vacate their cell during ``current_hour``.
 
         v1.48 (RULEBOOK §3.17) — a harvester being lifted is *departing*,
         and §3.17 collides two harvesters **arriving** on one cell. A
@@ -1344,27 +1396,63 @@ class NightSimulator:
         detail with no rules standing (§3.10, §3.13). See
         docs/OUTSTANDING_ISSUES.md #56.
 
-        Deciding it up front is only sound because **every way a pickup
-        can fail is a static precondition** — no such harvester, lifter
-        not in orbit, harvester already orbital. None of them depend on
-        what another seat does this hour, so a pickup promised now cannot
-        be falsified later and leave a lander sharing a cell with a unit
-        that never left. Step-aways do NOT have that property (a step can
-        be refused by an EMP cloud, a snap-hot cell or its own collision),
-        which is why they are not in here and are still order-dependent.
+        Deciding it up front is only sound because **every way the move
+        can fail is knowable now**. For a pickup they are all static —
+        no such harvester, lifter not in orbit, harvester already
+        orbital — and none of them depend on what another seat does.
+
+        v1.49 (§3.17.7) — **step-aways are in here too**, which is what
+        closes the hand-off gap. It looks like it should not be possible:
+        a step CAN be refused by something a rival does, namely a
+        collision at its own destination. But that is the only such
+        reason, and it is the one this method computes. Reading
+        ``try_step_unit`` from the top, every other refusal is static —
+        wrong owner, not on the surface, already damaged, not adjacent,
+        out of bounds, hold full — and the two dynamic gates above it in
+        the simulator, chaff and an EMP-smothered unit, are both settled
+        before the round and passed in. Everything *after* the collision
+        check moves the harvester unconditionally: a snap-hot cell
+        cripples it where it lands and an EMP cloud denies it the
+        harvest, but neither rewinds the step, so the origin is vacated
+        either way.
+
+        So the question "will this cell be free?" becomes a fixpoint
+        over the step graph rather than a race:
+
+        - A step whose destination is empty goes.
+        - A step whose destination is being vacated by a step that goes,
+          goes — which resolves a convoy of any length.
+        - A step blocked by someone who stays is refused, and that
+          refusal propagates back down the chain behind it.
+        - What survives with nobody stationary to blame is a **cycle**,
+          and a cycle is allowed: everyone in it is leaving. Note the
+          grid is bipartite, so the shortest cycle is four harvesters;
+          the two-unit case is a pass-through swap and §3.17.4 collides
+          it, which the swap pre-pass has already settled before we get
+          here.
+        - Two or more steps into ONE cell collide (§3.17.6) and nobody
+          vacates, so they are excluded before the fixpoint runs.
         """
         from sea_of_colours.game.session import cast_player
 
+        smothered = set(disabled_units or ())
+        spent = set(spent_seats or ())
+
+        def _seat_acts_this_hour(p: str) -> bool:
+            if applied[p] >= MAX_MOVES:
+                return False
+            if p in preempted or p in spent:
+                # Already acted this hour; the next queued move belongs
+                # to a LATER hour.
+                return False
+            if current_hour <= chaff_active_until and p not in chaff_triggerers:
+                # Chaff cancels this seat's slot, so nothing happens.
+                return False
+            return True
+
         leaving: Set[str] = set()
         for p in seats:
-            if applied[p] >= MAX_MOVES:
-                continue
-            if p in preempted:
-                # Already acted in the pre-hour phase; this seat's next
-                # queued move belongs to a LATER hour.
-                continue
-            if current_hour <= chaff_active_until and p not in chaff_triggerers:
-                # Chaff cancels this seat's slot, so nothing lifts.
+            if not _seat_acts_this_hour(p):
                 continue
             move, _ = _next_actionable(queue_for[p], pointers[p])
             if not isinstance(move, PickupMove):
@@ -1381,7 +1469,93 @@ class NightSimulator:
             if lf is None or lf.x is not None:
                 continue
             leaving.add(hh.id)
+
+        leaving |= self._steps_that_will_vacate(
+            sess, seats, queue_for, pointers,
+            acts=_seat_acts_this_hour,
+            smothered=smothered,
+            lifting=leaving,
+        )
         return leaving
+
+    @staticmethod
+    def _steps_that_will_vacate(
+        sess: "GameSession",
+        seats: Tuple[str, ...],
+        queue_for: Dict[str, List[Move]],
+        pointers: Dict[str, int],
+        *,
+        acts,
+        smothered: AbstractSet[str],
+        lifting: AbstractSet[str],
+    ) -> Set[str]:
+        """The fixpoint described in :meth:`_departing_harvesters`."""
+        from sea_of_colours.game.session import HARVESTER_HOLD_CAPACITY, _adj
+
+        # harvester id -> destination cell
+        wants: Dict[str, Tuple[int, int]] = {}
+        for p in seats:
+            if not acts(p):
+                continue
+            move, _ = _next_actionable(queue_for[p], pointers[p])
+            if not isinstance(move, StepMove):
+                continue
+            h = sess.entities.get(move.unit)
+            if not h or h.entity_type != "harvester" or h.owner != p:
+                continue
+            if h.x is None or h.y is None:
+                continue
+            if bool(getattr(h, "damaged", False)):
+                continue
+            if h.id in smothered:
+                continue
+            if len(h.cargo_squares) >= HARVESTER_HOLD_CAPACITY:
+                continue
+            tx, ty = int(move.to[0]), int(move.to[1])
+            if not (0 <= tx < sess.width and 0 <= ty < sess.height):
+                continue
+            if not _adj((h.x, h.y), (tx, ty)):
+                continue
+            wants[h.id] = (tx, ty)
+
+        # Two or more arrivals on one cell is a collision (§3.17.6):
+        # nobody gets there, so nobody leaves where they were.
+        crowded = {
+            dest for dest in wants.values()
+            if sum(1 for d in wants.values() if d == dest) > 1
+        }
+        movers = {hid for hid, dest in wants.items() if dest not in crowded}
+
+        # Who is standing where. Wrecks are skipped: a damaged harvester
+        # does not block (§3.17.1), so it cannot refuse anyone's step.
+        occupant: Dict[Tuple[int, int], str] = {}
+        for e in sess.entities.values():
+            if e.entity_type != "harvester" or e.x is None or e.y is None:
+                continue
+            if bool(getattr(e, "damaged", False)):
+                continue
+            occupant[(int(e.x), int(e.y))] = str(e.id)
+
+        # Propagate refusal backwards: blocked by someone staying, or by
+        # someone who is themselves blocked. Whatever is left when this
+        # settles is either walking into free space or going round in a
+        # ring, and both of those vacate.
+        blocked: Set[str] = set()
+        while True:
+            newly = {
+                hid for hid in movers - blocked
+                if (lambda occ: (
+                    occ is not None
+                    and occ != hid
+                    and occ not in lifting
+                    and (occ not in movers or occ in blocked)
+                ))(occupant.get(wants[hid]))
+            }
+            if not newly:
+                break
+            blocked |= newly
+
+        return movers - blocked
 
     def _maybe_resolve_swap_collision(
         self,
@@ -1394,16 +1568,29 @@ class NightSimulator:
         hour: int = 0,
         seats: Optional[Tuple[str, ...]] = None,
         skip_seats: Optional[AbstractSet[str]] = None,
-    ) -> bool:
-        """Detect & resolve a pass-through swap before the round.
+    ) -> Set[str]:
+        """Detect & resolve pass-through swaps before the round.
+
+        Returns the seats whose slot was spent here (empty if none) —
+        truthy exactly when something was resolved, so callers can
+        still read it as a flag.
 
         v0.9.6 — generalised to walk every (a, b) seat pair in
-        :attr:`GameSession.players` and stop at the first valid swap.
-        A swap is still pair-wise (RULEBOOK §3.6) — only two
-        harvesters cross at a time — but with 3-4 seats two
-        independent pairs can swap on the same hour. The outer round
-        loop calls this again next iteration so the second pair
-        resolves before the regular dispatch fires.
+        :attr:`GameSession.players`. A swap is still pair-wise
+        (RULEBOOK §3.6) — only two harvesters cross at a time — but
+        with 3-4 seats two independent pairs can swap on the same hour.
+
+        v1.48 — and both pairs now resolve HERE, on this hour. This
+        used to stop at the first pair and lean on the outer round loop
+        to catch the second one, which quietly cost the second pair an
+        hour: the loop derives its clock from ``max(applied) + 1``, and
+        the first pair had just bumped ``applied``. Both pairs wrecked
+        either way, so the board was right and only the replay lied —
+        but it lied about WHO, because the pair on the lower seats
+        always got the earlier stamp, and §3.13 gives seat index no say
+        in anything. (The per-seat re-stamp downstream cannot repair
+        it: a joint collision frame is owned by nobody, and that pass
+        skips frames with no owner.)
 
         v1.19 — ``skip_seats`` excludes seats that already spent this
         hour's slot in the pre-hour phase. Their next queued move
@@ -1415,62 +1602,73 @@ class NightSimulator:
 
         seat_list: Tuple[str, ...] = seats if seats is not None else tuple(sess.players)
         spent = set(skip_seats or ())
-        for ai in range(len(seat_list)):
-            for bi in range(ai + 1, len(seat_list)):
-                pa, pb = seat_list[ai], seat_list[bi]
-                if pa in spent or pb in spent:
-                    continue
-                a_move, _ = _next_actionable(queue_for[pa], pointers[pa])
-                b_move, _ = _next_actionable(queue_for[pb], pointers[pb])
-                if not (isinstance(a_move, StepMove) and isinstance(b_move, StepMove)):
-                    continue
-                if applied[pa] >= MAX_MOVES or applied[pb] >= MAX_MOVES:
-                    continue
-                ha = sess.entities.get(a_move.unit)
-                hb = sess.entities.get(b_move.unit)
-                if not (ha and hb and ha.entity_type == "harvester" and hb.entity_type == "harvester"):
-                    continue
-                if ha.x is None or ha.y is None or hb.x is None or hb.y is None:
-                    continue
-                if bool(getattr(ha, "damaged", False)) or bool(getattr(hb, "damaged", False)):
-                    continue
-                ta = (int(a_move.to[0]), int(a_move.to[1]))
-                tb = (int(b_move.to[0]), int(b_move.to[1]))
-                if (ha.x, ha.y) != tb or (hb.x, hb.y) != ta:
-                    continue
-                W, H = sess.width, sess.height
-                if not (0 <= ta[0] < W and 0 <= ta[1] < H and 0 <= tb[0] < W and 0 <= tb[1] < H):
-                    continue
+        resolved: Set[str] = set()
+        # Rescan after each pair: a seat that has just crossed is added
+        # to ``spent``, so it cannot be paired again on the same hour.
+        while True:
+            pair_found = False
+            for ai in range(len(seat_list)):
+                for bi in range(ai + 1, len(seat_list)):
+                    pa, pb = seat_list[ai], seat_list[bi]
+                    if pa in spent or pb in spent:
+                        continue
+                    a_move, _ = _next_actionable(queue_for[pa], pointers[pa])
+                    b_move, _ = _next_actionable(queue_for[pb], pointers[pb])
+                    if not (isinstance(a_move, StepMove) and isinstance(b_move, StepMove)):
+                        continue
+                    if applied[pa] >= MAX_MOVES or applied[pb] >= MAX_MOVES:
+                        continue
+                    ha = sess.entities.get(a_move.unit)
+                    hb = sess.entities.get(b_move.unit)
+                    if not (ha and hb and ha.entity_type == "harvester" and hb.entity_type == "harvester"):
+                        continue
+                    if ha.x is None or ha.y is None or hb.x is None or hb.y is None:
+                        continue
+                    if bool(getattr(ha, "damaged", False)) or bool(getattr(hb, "damaged", False)):
+                        continue
+                    ta = (int(a_move.to[0]), int(a_move.to[1]))
+                    tb = (int(b_move.to[0]), int(b_move.to[1]))
+                    if (ha.x, ha.y) != tb or (hb.x, hb.y) != ta:
+                        continue
+                    W, H = sess.width, sess.height
+                    if not (0 <= ta[0] < W and 0 <= ta[1] < H and 0 <= tb[0] < W and 0 <= tb[1] < H):
+                        continue
 
-                ok, caption = sess.try_swap_collision(
-                    cast_player(pa, allowed=seat_list), ha.id, ta,
-                    cast_player(pb, allowed=seat_list), hb.id, tb,
-                )
-                if not ok:
-                    continue
-                # v0.9.9 — _next_actionable no longer skips wastes, so
-                # each seat's pointer sits directly on the consumed
-                # StepMove. Advance by one and burn the slot.
-                for p in (pa, pb):
-                    pointers[p] += 1
-                    applied[p] += 1
-                sess.log_info(self._stamp_hour(hour, caption))
-                collisions = sess.pending_collision_events
-                sess.pending_collision_events = []
-                sess.replay_push_scene(
-                    replay,
-                    caption,
-                    owner=None,
-                    tag="collision_swap",
-                    collisions=collisions or None,
-                    hour=hour,
-                    attempted=f"swap {ha.id} ↔ {hb.id}",
-                    outcome="ok",
-                )
-                sess._redsign_hour = int(hour)  # type: ignore[attr-defined]
-                sess._pulse_probe_cameras()
-                return True
-        return False
+                    ok, caption = sess.try_swap_collision(
+                        cast_player(pa, allowed=seat_list), ha.id, ta,
+                        cast_player(pb, allowed=seat_list), hb.id, tb,
+                    )
+                    if not ok:
+                        continue
+                    # v0.9.9 — _next_actionable no longer skips wastes, so
+                    # each seat's pointer sits directly on the consumed
+                    # StepMove. Advance by one and burn the slot.
+                    for p in (pa, pb):
+                        pointers[p] += 1
+                        applied[p] += 1
+                        spent.add(p)
+                        resolved.add(p)
+                    sess.log_info(self._stamp_hour(hour, caption))
+                    collisions = sess.pending_collision_events
+                    sess.pending_collision_events = []
+                    sess.replay_push_scene(
+                        replay,
+                        caption,
+                        owner=None,
+                        tag="collision_swap",
+                        collisions=collisions or None,
+                        hour=hour,
+                        attempted=f"swap {ha.id} ↔ {hb.id}",
+                        outcome="ok",
+                    )
+                    sess._redsign_hour = int(hour)  # type: ignore[attr-defined]
+                    sess._pulse_probe_cameras()
+                    pair_found = True
+                    break
+                if pair_found:
+                    break
+            if not pair_found:
+                return resolved
 
     def _maybe_resolve_simultaneous_drops(
         self,
@@ -1483,13 +1681,27 @@ class NightSimulator:
         hour: int = 0,
         seats: Optional[Tuple[str, ...]] = None,
         skip_seats: Optional[AbstractSet[str]] = None,
-    ) -> bool:
+    ) -> Set[str]:
         """Detect & resolve simultaneous drop collisions before the round.
+
+        Returns the seats whose slot was spent here (empty if none) —
+        truthy exactly when something was resolved, so callers can
+        still read it as a flag.
 
         v0.9.10 — when multiple harvesters are trying to drop on the
         same square during the same hour, none land, all become damaged
         and stay in orbit. This is checked pre-hour (like swap collision)
         so we can handle all involved seats in one go.
+
+        v1.48 — *every* contested square on this hour is settled here,
+        where it used to stop after the first and leave the rest to the
+        next turn of the round loop. Same defect as the swap pre-pass
+        and the same cost: the clock is ``max(applied) + 1``, so the
+        second pile-up was reported an hour late, and which one came
+        second was decided by seat index. The groups are keyed by
+        target square and a seat can only be dropping on one of them,
+        so they are disjoint by construction — no rescan needed, just
+        do not leave early.
 
         v1.19 — ``skip_seats`` excludes seats that already spent this
         hour's slot in the pre-hour phase; see
@@ -1501,6 +1713,8 @@ class NightSimulator:
 
         seat_list: Tuple[str, ...] = seats if seats is not None else tuple(sess.players)
         spent = set(skip_seats or ())
+
+        resolved: Set[str] = set()
 
         # Build a map of target squares -> list of (seat, move, harvester) tuples
         drops_by_target: Dict[Tuple[int, int], List[Tuple[str, DropMove, object]]] = {}
@@ -1546,6 +1760,7 @@ class NightSimulator:
                 # Advance pointer and consume slot for this seat
                 pointers[seat] += 1
                 applied[seat] += 1
+                resolved.add(seat)
             
             # Record collision event
             sess._record_collision(
@@ -1587,11 +1802,252 @@ class NightSimulator:
             )
             sess._redsign_hour = int(hour)  # type: ignore[attr-defined]
             sess._pulse_probe_cameras()
-            
-            # Only resolve one simultaneous drop per hour (keep it simple)
-            return True
-        
-        return False
+
+        return resolved
+
+    def _maybe_resolve_converging_steps(
+        self,
+        sess: "GameSession",
+        queue_for: Dict[str, List[Move]],
+        pointers: Dict[str, int],
+        applied: Dict[str, int],
+        replay: List[dict],
+        *,
+        hour: int = 0,
+        seats: Optional[Tuple[str, ...]] = None,
+        skip_seats: Optional[AbstractSet[str]] = None,
+        disabled_units: Optional[AbstractSet[str]] = None,
+        departing_units: Optional[AbstractSet[str]] = None,
+    ) -> Set[str]:
+        """Two or more harvesters stepping into ONE EMPTY cell (§3.17).
+
+        v1.49 (§3.17.6). §3.17's governing sentence collides two harvesters
+        *arriving* on the same cell, and this is the plainest possible
+        case of it — but it was not one of the four illustrated
+        patterns, so it fell through to the ordinary seat loop. There
+        the first seat walked completed its step and **took the cell**,
+        and only the second was turned back. Both wrecked either way,
+        so the cost was not who survived but where: the winner's wreck
+        sat on the contested cell, the scars followed it, and which
+        harvester won was decided by seat index (§3.13 says it has no
+        say in anything).
+
+        Settled the way §3.17.3 and §3.17.4 settle the other two step
+        patterns: nobody moves, everybody wrecks **at their original
+        positions**. The scar goes on the contested cell, following
+        §3.17.2 — the other case where a destination is fought over and
+        no one arrives.
+
+        Deciding it before the round is sound for the same reason the
+        egress snapshot is: every remaining way ``try_step_unit``
+        refuses a move is a **static precondition** — not on the
+        surface, already damaged, not adjacent, out of bounds, hold
+        full — so no rival can falsify one of them mid-hour and leave
+        two harvesters wrecked over a step that was never going to
+        happen. The two that are NOT static are excluded up front:
+        chaff (the caller only runs the pre-passes on an unjammed hour)
+        and an EMP-smothered unit, which is why ``disabled_units`` is
+        passed in.
+
+        A healthy harvester already standing on the contested cell is
+        rammed too and wrecks in place (§3.17.3), without spending a
+        slot — it is not acting, it is being run into. That case had the
+        same disease one cell over: the occupant was wrecked by whichever
+        stepper the seat loop reached first, and the SECOND stepper then
+        strolled on unharmed, because by then the occupant was a wreck
+        and wrecks do not block (§3.17.1).
+
+        v1.49 — an occupant that is *leaving* this hour is not an
+        occupant. ``departing_units`` is the egress fixpoint, so a cell
+        being vacated counts as empty and the arrivals collide with each
+        other over it, not with the harvester on its way out.
+        """
+        from sea_of_colours.game.session import HARVESTER_HOLD_CAPACITY, _adj
+
+        seat_list: Tuple[str, ...] = seats if seats is not None else tuple(sess.players)
+        spent = set(skip_seats or ())
+        smothered = set(disabled_units or ())
+        departing = set(departing_units or ())
+        resolved: Set[str] = set()
+
+        steps_by_target: Dict[Tuple[int, int], List[Tuple[str, object]]] = {}
+        for p in seat_list:
+            if p in spent or applied[p] >= MAX_MOVES:
+                continue
+            move, _ = _next_actionable(queue_for[p], pointers[p])
+            if not isinstance(move, StepMove):
+                continue
+            h = sess.entities.get(move.unit)
+            if not h or h.entity_type != "harvester" or h.owner != p:
+                continue
+            if h.x is None or h.y is None:
+                continue
+            if bool(getattr(h, "damaged", False)):
+                continue
+            if h.id in smothered:
+                continue
+            if len(h.cargo_squares) >= HARVESTER_HOLD_CAPACITY:
+                continue
+            tx, ty = int(move.to[0]), int(move.to[1])
+            if not (0 <= tx < sess.width and 0 <= ty < sess.height):
+                continue
+            if not _adj((h.x, h.y), (tx, ty)):
+                continue
+            steps_by_target.setdefault((tx, ty), []).append((p, h))
+
+        for (tx, ty), movers in steps_by_target.items():
+            if len(movers) < 2:
+                continue
+
+            # Anyone healthy still standing there wrecks in place with
+            # them (§3.17.3), and does NOT spend a slot — it is not
+            # acting, it is being run into. Without this the occupant was
+            # rammed by whichever stepper the seat loop reached first,
+            # and the SECOND one strolled onto the cell unharmed, because
+            # by then the occupant was a wreck and wrecks do not block.
+            #
+            # ``departing`` excludes a harvester that is leaving this
+            # hour: the arrivals then contend over an empty cell and it
+            # gets away cleanly, which is §3.17.5's ruling applied to a
+            # square two rivals both wanted.
+            occupants = sess._undamaged_harvesters_at(
+                tx, ty, departing=departing,
+            )
+
+            owners: List[str] = []
+            harvester_ids: List[str] = []
+            total_spilled = 0
+
+            for seat, h in movers:
+                total_spilled += sess._damage_harvester(h)
+                owners.append(str(h.owner))
+                harvester_ids.append(str(h.id))
+                pointers[seat] += 1
+                applied[seat] += 1
+                spent.add(seat)
+                resolved.add(seat)
+
+            for occupant in occupants:
+                total_spilled += sess._damage_harvester(occupant)
+                owners.append(str(occupant.owner))
+                harvester_ids.append(str(occupant.id))
+
+            sess._record_collision(
+                tx, ty, owners,
+                event_type="converging_steps",
+                harvesters=harvester_ids,
+            )
+            # v1.6 kill-feed: every House in the pile-up damaged every
+            # other House's unit.
+            _distinct = [
+                o for i, o in enumerate(owners) if o and o not in owners[:i]
+            ]
+            for _atk in _distinct:
+                for _vic in _distinct:
+                    if _atk != _vic:
+                        sess._attrib("harv_damaged", str(_atk), str(_vic))
+
+            owners_label = "+".join(sorted(set(owners)))
+            harv_label = ", ".join(harvester_ids)
+            caption = (
+                f"CONVERGING STEPS at ({tx},{ty}) — "
+                f"({owners_label}) {harv_label} all wreck at their "
+                f"original positions, {total_spilled} cargo square(s) lost"
+            )
+            sess.log_info(self._stamp_hour(hour, caption))
+            collisions = sess.pending_collision_events
+            sess.pending_collision_events = []
+            # Ownerless, like the other joint collisions. The client
+            # needs no new branch for it: the timeline renders any frame
+            # without an owner, and playCollisionFx works off the
+            # ``collisions`` payload rather than the tag. There is no
+            # bespoke movement to animate here — nobody went anywhere.
+            sess.replay_push_scene(
+                replay,
+                caption,
+                owner=None,
+                tag="collision_converging_steps",
+                collisions=collisions or None,
+                hour=hour,
+                attempted=f"converging steps: {harv_label}",
+                outcome="collision",
+            )
+            sess._redsign_hour = int(hour)  # type: ignore[attr-defined]
+            sess._pulse_probe_cameras()
+
+        return resolved
+
+    def _crush_probes_under_harvesters(
+        self,
+        sess: "GameSession",
+        replay: List[dict],
+        *,
+        hour: int,
+    ) -> None:
+        """v1.49 (§3.11.1) — nothing survives the hour under a harvester.
+
+        Crushing is normally the mover's own business, done inside its
+        slot, and for the ordinary case that is right: a harvester rides
+        onto a probe that was already there. It is wrong when the probe
+        launches onto the harvester's cell on the SAME hour, because
+        then the answer turned on seat index. Prober first and its probe
+        was flattened by the landing that followed; harvester first and
+        the probe settled underneath one and lived, which is also the
+        only way the board could ever show a probe and a harvester
+        sharing a cell.
+
+        This closes it without disturbing the mover's crush, which keeps
+        its caption, its frame and its kill-feed credit. The sweep runs
+        once every seat has acted, so by then the ordinary case has
+        cleaned up after itself and the only thing left to find is a
+        probe that arrived late.
+
+        A cell with more than one harvester on it is a wreck pile, and
+        the crush is credited to nobody: picking one of them would put
+        the seat loop back in charge of the answer.
+        """
+        by_cell: Dict[Tuple[int, int], List[str]] = {}
+        for e in sess.entities.values():
+            if e.entity_type == "harvester" and e.x is not None:
+                by_cell.setdefault((int(e.x), int(e.y)), []).append(str(e.owner))
+        if not by_cell:
+            return
+        buried = sorted({
+            (int(e.x), int(e.y))
+            for e in sess.entities.values()
+            if e.entity_type == "probe"
+            and e.x is not None
+            and (int(e.x), int(e.y)) in by_cell
+        })
+        if not buried:
+            return
+
+        msgs: List[str] = []
+        for x, y in buried:
+            owners = by_cell[(x, y)]
+            msgs.extend(sess.consume_probes_at(
+                x, y, crusher_owner=owners[0] if len(owners) == 1 else None,
+            ))
+        if not msgs:
+            return
+
+        crushed_probes = sess.pending_probe_crush_events
+        sess.pending_probe_crush_events = []
+        caption = "; ".join(msgs)
+        sess.log_info(self._stamp_hour(hour, caption))
+        # Ownerless, like the joint collisions: the probe's House lost it
+        # and the harvester's House did nothing but stand there, so
+        # neither one is the actor. The client needs no new branch —
+        # playProbeCrushFx works off ``crushed_probes``, not the tag.
+        sess.replay_push_scene(
+            replay,
+            caption,
+            owner=None,
+            tag="probe_crushed",
+            crushed_probes=crushed_probes or None,
+            hour=hour,
+            outcome="ok",
+        )
 
     def _apply_one(
         self,
